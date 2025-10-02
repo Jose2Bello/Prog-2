@@ -83,12 +83,21 @@ void llenarArreglo(int* arreglo, int tamanio) {
     }
     cout << "Arreglo lleno." << endl;
 }
-// Función para mostrar todos los elementos del arreglo
+
 void mostrarArreglo(int* arreglo, int tamanio) {
-    // TODO: Implementar esta función
-    // - Verificar que arreglo no sea nullptr
-    // - Mostrar todos los elementos del arreglo
-    // - Manejar caso de arreglo vacío
+    if (arreglo == nullptr) {
+        cout << "Error: El arreglo no está inicializado (nullptr)." << endl;
+        return;
+    }
+    
+    if (tamanio <= 0) {
+        cout << "El arreglo está vacío o tiene tamaño 0." << endl;
+        return;
+    }
+    cout << "Elementos del arreglo:" << endl;
+    for (int s = 0; s < tamanio; s++) {
+        cout << "[" << s << "] = " << arreglo[s] << endl;
+    }
 }
 
 // Función para encontrar el número mayor
