@@ -53,24 +53,36 @@
 #include <iomanip>
 using namespace std;
 
-// Función para crear un arreglo dinámico
 int* crearArreglo(int tamanio) {
-    // TODO: Implementar esta función
-    // - Validar que tamanio sea positivo
-    // - Crear arreglo dinámico con new
-    // - Verificar que new no retorne nullptr
-    // - Retornar puntero al arreglo
-    return nullptr; // Placeholder
+    if (tamanio <= 0) {
+        cout << "El tamaño debe ser un número positivo." << endl;
+        return nullptr;
+    }
+    int* arreglo = new int[tamanio];
+    if (arreglo == nullptr) {
+        cout << "No se pudo asignar memoria." << endl;
+        return nullptr;
+    }
+    cout << "Arreglo de tamaño " << tamanio << " creado exitosamente." << endl;
+    return arreglo;
 }
-
-// Función para llenar el arreglo con valores del usuario
 void llenarArreglo(int* arreglo, int tamanio) {
-    // TODO: Implementar esta función
-    // - Verificar que arreglo no sea nullptr
-    // - Pedir valores al usuario
-    // - Llenar el arreglo con los valores ingresados
-}
 
+    if (arreglo == nullptr) {
+        cout << "El arreglo es invalido" << endl;
+        return;
+    }
+    if (tamanio <= 0) {
+        cout << "Tamaño invalido, ingrese de nuevo." << endl;
+        return;
+    }
+    cout << "Ingrese los valores para el arreglo:" << endl;
+    for (int i = 0; i < tamanio; i++) {
+        cout << "Valor" << i << ":";
+        cin >> arreglo[i];
+    }
+    cout << "Arreglo lleno." << endl;
+}
 // Función para mostrar todos los elementos del arreglo
 void mostrarArreglo(int* arreglo, int tamanio) {
     // TODO: Implementar esta función
