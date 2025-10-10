@@ -1,53 +1,3 @@
-/*
- * EJERCICIO CLASE 1 - PUNTEROS Y MEMORIA DINÁMICA
- * ================================================
- * 
- * ENUNCIADO SIMPLIFICADO:
- * Implementar un programa que permita:
- * 1. Crear un arreglo dinámico de números enteros
- * 2. Llenar el arreglo con valores ingresados por el usuario
- * 3. Mostrar todos los números del arreglo
- * 4. Encontrar el número mayor en el arreglo
- * 5. Calcular el promedio de todos los números
- * 6. Liberar la memoria correctamente
- * 
- * REQUISITOS OBLIGATORIOS:
- * - Usar punteros y memoria dinámica (new/delete)
- * - Usar paso por referencia donde sea apropiado
- * - Validar entrada del usuario (tamaño del arreglo)
- * - Liberar toda la memoria asignada
- * - Asignar nullptr después de delete
- * 
- * FUNCIONES QUE DEBE IMPLEMENTAR:
- * 1. int* crearArreglo(int tamanio)
- * 2. void llenarArreglo(int* arreglo, int tamanio)
- * 3. void mostrarArreglo(int* arreglo, int tamanio)
- * 4. int encontrarMayor(int* arreglo, int tamanio)
- * 5. float calcularPromedio(int* arreglo, int tamanio)
- * 6. void liberarArreglo(int*& arreglo)
- * 
- * MENÚ SIMPLE:
- * 1. Crear y llenar arreglo
- * 2. Mostrar arreglo
- * 3. Encontrar número mayor
- * 4. Calcular promedio
- * 5. Salir
- * 
- * NOTAS IMPORTANTES:
- * - Validar que el tamaño del arreglo sea positivo
- * - Verificar que new no retorne nullptr
- * - Usar buenas prácticas de programación
- * - Comentar el código apropiadamente
- * 
- * CRITERIOS DE EVALUACIÓN:
- * - Correcta implementación de punteros (50%)
- * - Manejo correcto de memoria (30%)
- * - Funcionalidad del programa (20%)
- * 
- * TIEMPO ESTIMADO: 1-2 horas
- * DIFICULTAD: Básica-Medio
- */
-
 #include <iostream>
 #include <locale>
 #include <iomanip>
@@ -102,29 +52,42 @@ void mostrarArreglo(int* arreglo, int tamanio) {
 
 // Función para encontrar el número mayor
 int encontrarMayor(int* arreglo, int tamanio) {
-    // TODO: Implementar esta función
-    // - Verificar que arreglo no sea nullptr y tamanio > 0
-    // - Buscar el número mayor en el arreglo
-    // - Retornar el número mayor
-    return 0; // Placeholder
+    if (arreglo == nullptr || tamanio <= 0) {
+        cout << "Error: Arreglo inválido o tamaño incorrecto."<< endl;
+        return;
+    }
+    int mayor = arreglo[0];
+    for (int i = 1; i < tamanio; i++) {
+        if (arreglo[i] > mayor) {
+            mayor = arreglo[i];
+        }
+    }
+    return mayor; 
 }
 
 // Función para calcular el promedio
 float calcularPromedio(int* arreglo, int tamanio) {
-    // TODO: Implementar esta función
-    // - Verificar que arreglo no sea nullptr y tamanio > 0
-    // - Sumar todos los elementos
-    // - Dividir por el tamaño
-    // - Retornar el promedio
-    return 0.0f; // Placeholder
+ if (arreglo == nullptr || tamanio <= 0) {
+    cout << "Error: Arreglo inválido o tamaño incorrecto."<< endl;
+    return 0.0f;
+}
+int promediototal = 0;
+for (int u = 0; u < tamanio; u++){
+    promediototal += arreglo[u];
+}
+float promedio = static_cast<float>(promediototal) / tamanio;
+return promedio;
 }
 
 // Función para liberar la memoria del arreglo
 void liberarArreglo(int*& arreglo) {
-    // TODO: Implementar esta función
-    // - Verificar que arreglo no sea nullptr
-    // - Liberar memoria con delete[]
-    // - Asignar nullptr al puntero
+      if (arreglo == nullptr) {
+        cout << "Error: Arreglo inválido o tamaño incorrecto."<< endl;
+        return;
+    }
+    delete[] arreglo;
+    arreglo = nullptr;
+    cout <<"Memoria liberada correctamente" << endl;
 }
 
 // Función para mostrar el menú
