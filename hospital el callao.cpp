@@ -100,12 +100,11 @@ struct Cita {
 Hospital* inicializarHospital() {
     Hospital* hospital = new Hospital;
     
-    // Inicializar datos básicos del hospital
+
     strcpy(hospital->nombre, "Hospital El Callao");
     strcpy(hospital->direccion, "Av. El milagro");
     strcpy(hospital->telefono, "0424-6292319");
-    
-    // Inicializar arrays dinámicos
+
     hospital->capacidadPacientes = 10;
     hospital->pacientes = new Paciente[hospital->capacidadPacientes];
     hospital->cantidadPacientes = 0;
@@ -118,7 +117,7 @@ Hospital* inicializarHospital() {
     hospital->citas = new Cita[hospital->capacidadCitas];
     hospital->cantidadCitas = 0;
     
-    // Inicializar contadores de ID
+  
     hospital->siguienteIdPaciente = 1;
     hospital->siguienteIdDoctor = 1;
     hospital->siguienteIdCita = 1;
@@ -131,4 +130,26 @@ Hospital* inicializarHospital() {
     
     return hospital;
 }
+void liberarHospital(Hospital* hospital) {
+
+    for (int i = 0; i < hospital->cantidadPacientes; i++) {
+        delete[] hospital->pacientes[i].historial;
+        delete[] hospital->pacientes[i].citasAgendadas;
+    }
+   
+    for (int i = 0; i < hospital->cantidadDoctores; i++) {
+        delete[] hospital->doctores[i].pacientesAsignados;
+        delete[] hospital->doctores[i].citasAgendadas;
+    }
+ 
+    delete[] hospital->pacientes;
+    delete[] hospital->doctores;
+    delete[] hospital->citas;
+    
+    
+    delete hospital;
+    
+    cout << "Memoria del hospital liberada correctamente" << endl;
+}
+
 
