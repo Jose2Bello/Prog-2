@@ -97,3 +97,38 @@ struct Cita {
     char observaciones[200];
     bool atendida;
 };
+Hospital* inicializarHospital() {
+    Hospital* hospital = new Hospital;
+    
+    // Inicializar datos básicos del hospital
+    strcpy(hospital->nombre, "Hospital El Callao");
+    strcpy(hospital->direccion, "Av. El milagro");
+    strcpy(hospital->telefono, "0424-6292319");
+    
+    // Inicializar arrays dinámicos
+    hospital->capacidadPacientes = 10;
+    hospital->pacientes = new Paciente[hospital->capacidadPacientes];
+    hospital->cantidadPacientes = 0;
+    
+    hospital->capacidadDoctores = 5;
+    hospital->doctores = new Doctor[hospital->capacidadDoctores];
+    hospital->cantidadDoctores = 0;
+    
+    hospital->capacidadCitas = 20;
+    hospital->citas = new Cita[hospital->capacidadCitas];
+    hospital->cantidadCitas = 0;
+    
+    // Inicializar contadores de ID
+    hospital->siguienteIdPaciente = 1;
+    hospital->siguienteIdDoctor = 1;
+    hospital->siguienteIdCita = 1;
+    hospital->siguienteIdConsulta = 1;
+    
+    cout << "Hospital inicializado correctamente" << endl;
+    cout << "Capacidad inicial - Pacientes: " << hospital->capacidadPacientes;
+    cout << ", Doctores: " << hospital->capacidadDoctores;
+    cout << ", Citas: " << hospital->capacidadCitas << endl;
+    
+    return hospital;
+}
+
