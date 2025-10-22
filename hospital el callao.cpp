@@ -1,6 +1,9 @@
 #include <iostream>
 #include <locale>
 #include <iomanip>
+#include <cstring>
+#include <ctime>
+
 using namespace std;
 
 struct Hospital {
@@ -97,14 +100,16 @@ struct Cita {
     char observaciones[200];
     bool atendida;
 };
+
 Hospital* inicializarHospital() {
     Hospital* hospital = new Hospital;
     
-
+    // Inicializar datos básicos del hospital
     strcpy(hospital->nombre, "Hospital El Callao");
     strcpy(hospital->direccion, "Av. El milagro");
     strcpy(hospital->telefono, "0424-6292319");
-
+    
+    // Inicializar arrays dinámicos
     hospital->capacidadPacientes = 10;
     hospital->pacientes = new Paciente[hospital->capacidadPacientes];
     hospital->cantidadPacientes = 0;
@@ -117,7 +122,7 @@ Hospital* inicializarHospital() {
     hospital->citas = new Cita[hospital->capacidadCitas];
     hospital->cantidadCitas = 0;
     
-  
+    // Inicializar contadores de ID
     hospital->siguienteIdPaciente = 1;
     hospital->siguienteIdDoctor = 1;
     hospital->siguienteIdCita = 1;
@@ -130,26 +135,108 @@ Hospital* inicializarHospital() {
     
     return hospital;
 }
-void liberarHospital(Hospital* hospital) {
 
+void liberarHospital(Hospital* hospital) {
+    // Liberar memoria de cada paciente
     for (int i = 0; i < hospital->cantidadPacientes; i++) {
         delete[] hospital->pacientes[i].historial;
         delete[] hospital->pacientes[i].citasAgendadas;
     }
-   
+    
+    // Liberar memoria de cada doctor
     for (int i = 0; i < hospital->cantidadDoctores; i++) {
         delete[] hospital->doctores[i].pacientesAsignados;
         delete[] hospital->doctores[i].citasAgendadas;
     }
- 
+    
+    // Liberar arrays principales
     delete[] hospital->pacientes;
     delete[] hospital->doctores;
     delete[] hospital->citas;
     
-    
+    // Liberar el hospital
     delete hospital;
     
     cout << "Memoria del hospital liberada correctamente" << endl;
 }
 
+Paciente* buscarPacientePorCedula(Hospital* hospital, const char* cedula) {
+    for (int i = 0; i < hospital->cantidadPacientes; i++) {
+        const char* cedulaPaciente = hospital->pacientes[i].cedula;
+    
+        if (strcmp(cedulaPaciente, cedula) == 0) {
+            return &hospital->pacientes[i];
+        }
+    }
+    
+    return nullptr;  
+}
 
+Paciente* buscarPacientePorId(Hospital* hospital, int id) {
+    for (int i = 0; i < hospital->cantidadPacientes; i++) {
+        if (hospital->pacientes[i].id == id) {
+            return &hospital->pacientes[i];
+        }
+    }
+    
+    return nullptr; 
+}
+Paciente** buscarPacientesPorNombre(Hospital* hospital,  const char* nombre, int* cantidad) {
+    Paciente** resultados = new Paciente*[hospital->cantidadPacientes];
+    *cantidad = 0;
+    
+    for (int i = 0; i < hospital->cantidadPacientes; i++) {
+        if (strstr(hospital->pacientes[i].nombre, nombre) != nullptr) {
+            resultados[*cantidad] = &hospital->pacientes[i];
+            (*cantidad)++;
+        }
+    }
+    
+    return resultados; 
+}
+
+Paciente** buscarPacientesPorNombre(Hospital* hospital, const char* nombre, int* cantidad) {
+    if (!hospital || !nombre || !cantidad) {
+        if (cantidad) *cantidad = 0;
+        return nullptr;
+    }
+    
+    Paciente** resultados = new Paciente*[hospital->cantidadPacientes];
+    *cantidad = 0;
+    
+   
+    char* nombreLower = new char[strlen(nombre) + 1];
+    for (int i = 0; nombre[i]; i++) {
+        nombreLower[i] = tolower(nombre[i]);
+    }
+    nombreLower[strlen(nombre)] = '\0';
+    
+    for (int i = 0; i < hospital->cantidadPacientes; i++) {
+        char* nombrePacienteLower = new char[strlen(hospital->pacientes[i].nombre) + 1];
+        for (int j = 0; hospital->pacientes[i].nombre[j]; j++) {
+            nombrePacienteLower[j] = tolower(hospital->pacientes[i].nombre[j]);
+        }
+        nombrePacienteLower[strlen(hospital->pacientes[i].nombre)] = '\0';
+        if (strstr(nombrePacienteLower, nombreLower) != nullptr) {
+            resultados[*cantidad] = &hospital->pacientes[i];
+            (*cantidad)++;
+        }
+        
+        delete[] nombrePacienteLower;
+    }
+    
+    delete[] nombreLower;
+    
+    if (*cantidad == 0) {
+        delete[] resultados;
+        return nullptr;
+    }
+    
+    return resultados;
+}
+
+void liberarResultadosBusqueda(Paciente** resultados) {
+    if (resultados) {
+        delete[] resultados;
+    }
+}
