@@ -240,3 +240,726 @@ void liberarResultadosBusqueda(Paciente** resultados) {
         delete[] resultados;
     }
 }
+bool actualizarPaciente(Hospital* hospital, int id) {
+    // Buscar el paciente por ID
+    Paciente* paciente = buscarPacientePorId(hospital, id);
+    
+    if (!paciente) {
+        cout << "Error: No se encontró paciente con ID " << id << endl;
+        return false;
+    }
+    
+    cout << "\n=== ACTUALIZAR DATOS DEL PACIENTE ===" << endl;
+    cout << "Paciente: " << paciente->nombre << " " << paciente->apellido << endl;
+    cout << "ID: " << paciente->id << endl;
+    cout << "Deje en blanco para mantener el valor actual\n" << endl;
+    
+    char buffer[200];
+    
+    
+    cout << "Nombre actual: " << paciente->nombre << endl;
+    cout << "Nuevo nombre: ";
+    cin.ignore();
+    cin.getline(buffer, sizeof(buffer));
+    if (strlen(buffer) > 0) {
+        // Validar que el nombre no esté vacío después de trim
+        bool soloEspacios = true;
+        for (int i = 0; buffer[i]; i++) {
+            if (!isspace(buffer[i])) {
+                soloEspacios = false;
+                break;
+            }
+        }
+        if (!soloEspacios) {
+            strcpy(paciente->nombre, buffer);
+        }
+    }
+    
+    
+    cout << "Apellido actual: " << paciente->apellido << endl;
+    cout << "Nuevo apellido: ";
+    cin.getline(buffer, sizeof(buffer));
+    if (strlen(buffer) > 0) {
+        bool soloEspacios = true;
+        for (int i = 0; buffer[i]; i++) {
+            if (!isspace(buffer[i])) {
+                soloEspacios = false;
+                break;
+            }
+        }
+        if (!soloEspacios) {
+            strcpy(paciente->apellido, buffer);
+        }
+    }
+    
+
+    cout << "Edad actual: " << paciente->edad << endl;
+    cout << "Nueva edad: ";
+    cin.getline(buffer, sizeof(buffer));
+    if (strlen(buffer) > 0) {
+        int nuevaEdad = atoi(buffer);
+        if (nuevaEdad > 0 && nuevaEdad <= 150) {
+            paciente->edad = nuevaEdad;
+        } else {
+            cout << "Edad no válida. Manteniendo valor actual." << endl;
+        }
+    }
+    
+
+    cout << "Sexo actual: " << paciente->sexo << endl;
+    cout << "Nuevo sexo (M/F): ";
+    cin.getline(buffer, sizeof(buffer));
+    if (strlen(buffer) > 0) {
+        char nuevoSexo = toupper(buffer[0]);
+        if (nuevoSexo == 'M' || nuevoSexo == 'F') {
+            paciente->sexo = nuevoSexo;
+        } else {
+            cout << "Sexo no válido. Use M o F. Manteniendo valor actual." << endl;
+        }
+    }
+    
+    
+    cout << "Teléfono actual: " << paciente->telefono << endl;
+    cout << "Nuevo teléfono: ";
+    cin.getline(buffer, sizeof(buffer));
+    if (strlen(buffer) > 0) {
+        strcpy(paciente->telefono, buffer);
+    }
+ 
+    cout << "Dirección actual: " << paciente->direccion << endl;
+    cout << "Nueva dirección: ";
+    cin.getline(buffer, sizeof(buffer));
+    if (strlen(buffer) > 0) {
+        strcpy(paciente->direccion, buffer);
+    }
+    
+  
+    cout << "Email actual: " << paciente->email << endl;
+    cout << "Nuevo email: ";
+    cin.getline(buffer, sizeof(buffer));
+    if (strlen(buffer) > 0) {
+        strcpy(paciente->email, buffer);
+    }
+    
+  
+    cout << "Tipo de sangre actual: " << paciente->tipoSangre << endl;
+    cout << "Nuevo tipo de sangre: ";
+    cin.getline(buffer, sizeof(buffer));
+    if (strlen(buffer) > 0) {
+        strcpy(paciente->tipoSangre, buffer);
+    }
+    
+
+    cout << "Alergias actuales: " << paciente->alergias << endl;
+    cout << "Nuevas alergias: ";
+    cin.getline(buffer, sizeof(buffer));
+    if (strlen(buffer) > 0) {
+        strcpy(paciente->alergias, buffer);
+    }
+    
+ 
+    cout << "Observaciones actuales: " << paciente->observaciones << endl;
+    cout << "Nuevas observaciones: ";
+    cin.getline(buffer, sizeof(buffer));
+    if (strlen(buffer) > 0) {
+        strcpy(paciente->observaciones, buffer);
+    }
+    
+    cout << "\nDatos del paciente actualizados correctamente." << endl;
+    return true;
+}
+
+bool eliminarPaciente(Hospital* hospital, int id) {
+
+    int indice = -1;
+    for (int i = 0; i < hospital->cantidadPacientes; i++) {
+        if (hospital->pacientes[i].id == id) {
+            indice = i;
+            break;
+        }
+    }
+    
+    if (indice == -1) {
+        cout << "Error: No se encontró paciente con ID " << id << endl;
+        return false;
+    }
+    
+    Paciente* paciente = &hospital->pacientes[indice];
+    
+    // Liberar memoria de los arregloss dinámicos del paciente
+    delete[] paciente->historial;
+    delete[] paciente->citasAgendadas;
+    
+    // Eliminar o cancelar todas las citas asociadas al paciente
+    for (int i = 0; i < hospital->cantidadCitas; i++) {
+        if (hospital->citas[i].idPaciente == id) {
+            strcpy(hospital->citas[i].estado, "CANCELADA");
+            hospital->citas[i].atendida = false;
+            
+            // También remover esta cita de los doctores
+            for (int j = 0; j < hospital->cantidadDoctores; j++) {
+                if (hospital->doctores[j].id == hospital->citas[i].idDoctor) {
+                    // Buscar y eliminar la cita del array del doctor
+                    for (int k = 0; k < hospital->doctores[j].cantidadCitas; k++) {
+                        if (hospital->doctores[j].citasAgendadas[k] == hospital->citas[i].id) {
+                            // Mover citas restantes hacia adelante
+                            for (int l = k; l < hospital->doctores[j].cantidadCitas - 1; l++) {
+                                hospital->doctores[j].citasAgendadas[l] = hospital->doctores[j].citasAgendadas[l + 1];
+                            }
+                            hospital->doctores[j].cantidadCitas--;
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    
+   
+    for (int i = 0; i < hospital->cantidadDoctores; i++) {
+        for (int j = 0; j < hospital->doctores[i].cantidadPacientes; j++) {
+            if (hospital->doctores[i].pacientesAsignados[j] == id) {
+              
+                for (int k = j; k < hospital->doctores[i].cantidadPacientes - 1; k++) {
+                    hospital->doctores[i].pacientesAsignados[k] = hospital->doctores[i].pacientesAsignados[k + 1];
+                }
+                hospital->doctores[i].cantidadPacientes--;
+                break;
+            }
+        }
+    }
+    
+    
+    for (int i = indice; i < hospital->cantidadPacientes - 1; i++) {
+        hospital->pacientes[i] = hospital->pacientes[i + 1];
+    }
+    hospital->cantidadPacientes--;
+    
+    cout << "Paciente con ID " << id << " eliminado correctamente." << endl;
+    cout << "Citas asociadas canceladas y referencias eliminadas." << endl;
+    
+    return true;
+}
+
+void listarPacientes(Hospital* hospital) {
+    if (hospital->cantidadPacientes == 0) {
+        cout << "No hay pacientes registrados." << endl;
+        return;
+    }
+    
+    cout << "\nLISTA DE PACIENTES (" << hospital->cantidadPacientes << "):" << endl;
+    cout << "┌──────┬──────────────────────────┬──────────────┬──────┬────────────┐" << endl;
+    cout << "│  ID  │       NOMBRE COMPLETO    │    CÉDULA    │ EDAD │ CONSULTAS  │" << endl;
+    cout << "├──────┼──────────────────────────┼──────────────┼──────┼────────────┤" << endl;
+    
+    for (int i = 0; i < hospital->cantidadPacientes; i++) {
+        Paciente* p = &hospital->pacientes[i];
+        
+        
+        char nombreCompleto[100];
+        snprintf(nombreCompleto, sizeof(nombreCompleto), "%s %s", p->nombre, p->apellido);
+        
+        if (strlen(nombreCompleto) > 22) {
+            nombreCompleto[19] = '.';
+            nombreCompleto[20] = '.';
+            nombreCompleto[21] = '.';
+            nombreCompleto[22] = '\0';
+        }
+        
+        printf("│ %4d │ %-24s │ %-12s │ %4d │ %10d │\n", 
+               p->id, nombreCompleto, p->cedula, p->edad, p->cantidadConsultas);
+    }
+    
+    cout << "└──────┴──────────────────────────┴──────────────┴──────┴────────────┘" << endl;
+
+}
+
+void agregarConsultaAlHistorial(Paciente* paciente, HistorialMedico consulta) {
+  
+    if (paciente->cantidadConsultas >= paciente->capacidadHistorial) {
+ 
+        int nuevaCapacidad = paciente->capacidadHistorial * 2;
+
+        HistorialMedico* nuevoHistorial = new HistorialMedico[nuevaCapacidad];
+        
+        for (int i = 0; i < paciente->cantidadConsultas; i++) {
+            nuevoHistorial[i] = paciente->historial[i];
+        }
+        
+        delete[] paciente->historial;
+        
+        paciente->historial = nuevoHistorial;
+        paciente->capacidadHistorial = nuevaCapacidad;
+        
+        cout << "Historial médico redimensionado. Nueva capacidad: " << nuevaCapacidad << endl;
+    }
+    
+    paciente->historial[paciente->cantidadConsultas] = consulta;
+    
+    paciente->cantidadConsultas++;
+    
+    cout << "Consulta agregada al historial. Total de consultas: " << paciente->cantidadConsultas << endl;
+}
+
+HistorialMedico* obtenerHistorialCompleto(Paciente* paciente, int* cantidad) {
+    if (!paciente || !cantidad) {
+        if (cantidad) *cantidad = 0;
+        return nullptr;
+    }
+    *cantidad = paciente->cantidadConsultas;
+    return paciente->historial;
+}
+
+void mostrarHistorialMedico(Paciente* paciente) {
+    if (!paciente) {
+        cout << "Error: Paciente no válido." << endl;
+        return;
+    }
+    
+    if (paciente->cantidadConsultas == 0) {
+        cout << "El paciente no tiene consultas en su historial médico." << endl;
+        return;
+    }
+    
+    cout << "\n=== HISTORIAL MÉDICO ===" << endl;
+    cout << "Paciente: " << paciente->nombre << " " << paciente->apellido << endl;
+    cout << "Cédula: " << paciente->cedula << " | Edad: " << paciente->edad << endl;
+    cout << "Total de consultas: " << paciente->cantidadConsultas << endl;
+    cout << endl;
+    
+    // Encabezado de la tabla
+    cout << left << setw(12) << "FECHA" 
+         << setw(8) << "HORA" 
+         << setw(25) << "DIAGNÓSTICO" 
+         << setw(8) << "DOCTOR"
+         << setw(10) << "COSTO" 
+         << endl;
+    
+
+    cout << string(65, '-') << endl;
+    
+
+    int cantidad;
+    HistorialMedico* historial = obtenerHistorialCompleto(paciente, &cantidad);
+    
+
+    for (int i = 0; i < cantidad; i++) {
+        
+        char diagnosticoMostrar[26];
+        strcpy(diagnosticoMostrar, historial[i].diagnostico);
+        if (strlen(diagnosticoMostrar) > 23) {
+            diagnosticoMostrar[20] = '.';
+            diagnosticoMostrar[21] = '.';
+            diagnosticoMostrar[22] = '.';
+            diagnosticoMostrar[23] = '\0';
+        }
+        
+        cout << left << setw(12) << historial[i].fecha
+             << setw(8) << historial[i].hora
+             << setw(25) << diagnosticoMostrar
+             << setw(8) << historial[i].idDoctor
+             << "$" << setw(9) << fixed << setprecision(2) << historial[i].costo
+             << endl;
+    }
+    
+    
+    cout << string(65, '-') << endl;
+
+    float costoTotal = 0;
+    for (int i = 0; i < cantidad; i++) {
+        costoTotal += historial[i].costo;
+    }
+    cout << "Costo total del historial: $" << fixed << setprecision(2) << costoTotal << endl;
+}
+
+HistorialMedico* obtenerUltimaConsulta(Paciente* paciente){
+    if (!paciente || paciente->cantidadConsultas == 0) {
+        return nullptr;
+    }
+    return &paciente->historial[paciente->cantidadConsultas - 1];
+}
+
+
+//MODULO DE DOCTORES
+
+Doctor* crearDoctor(Hospital* hospital, const char* nombre,
+                   const char* apellido, const char* cedula,
+                   const char* especialidad, int aniosExperiencia,
+                   float costoConsulta) {
+    
+   
+    if (!hospital || !nombre || !apellido || !cedula || !especialidad) {
+        cout << "Error: Parámetros inválidos." << endl;
+        return nullptr;
+    }
+    
+    for (int i = 0; i < hospital->cantidadDoctores; i++) {
+        if (strcmp(hospital->doctores[i].cedula, cedula) == 0) {
+            cout << "Error: Ya existe un doctor con la misma cédula " << cedula << endl;
+            return nullptr;
+        }
+    }
+
+    if (aniosExperiencia < 0) {
+        cout << "Error: Los años de experiencia no pueden ser negativos." << endl;
+        return nullptr;
+    }
+    
+    if (costoConsulta < 0) {
+        cout << "Error: El costo de consulta no puede ser negativo." << endl;
+        return nullptr;
+    }
+    
+    if (hospital->cantidadDoctores >= hospital->capacidadDoctores) {
+        int nuevaCapacidad = hospital->capacidadDoctores * 2;
+        Doctor* nuevosDoctores = new Doctor[nuevaCapacidad];
+        
+        
+        for (int i = 0; i < hospital->cantidadDoctores; i++) {
+            nuevosDoctores[i] = hospital->doctores[i];
+        }
+        
+        delete[] hospital->doctores;
+        hospital->doctores = nuevosDoctores;
+        hospital->capacidadDoctores = nuevaCapacidad;
+        
+        cout << "Capacidad de doctores aumentada a " << nuevaCapacidad << endl;
+    }
+    
+    int indice = hospital->cantidadDoctores;
+    
+
+    hospital->doctores[indice].id = hospital->siguienteIdDoctor++;
+    strcpy(hospital->doctores[indice].nombre, nombre);
+    strcpy(hospital->doctores[indice].apellido, apellido);
+    strcpy(hospital->doctores[indice].cedula, cedula);
+    strcpy(hospital->doctores[indice].especialidad, especialidad);
+    hospital->doctores[indice].aniosExperiencia = aniosExperiencia;
+    hospital->doctores[indice].costoConsulta = costoConsulta;
+    
+ 
+    hospital->doctores[indice].capacidadPacientes = 10;
+    hospital->doctores[indice].pacientesAsignados = new int[10];
+    hospital->doctores[indice].cantidadPacientes = 0;
+    
+    hospital->doctores[indice].capacidadCitas = 20;
+    hospital->doctores[indice].citasAgendadas = new int[20];
+    hospital->doctores[indice].cantidadCitas = 0;
+    
+    strcpy(hospital->doctores[indice].horarioAtencion, "L-V 8:00-17:00");
+    strcpy(hospital->doctores[indice].telefono, "");
+    strcpy(hospital->doctores[indice].email, "");
+    
+    
+    hospital->doctores[indice].disponible = true;
+    
+    
+    hospital->cantidadDoctores++;
+    
+    cout << "Doctor creado exitosamente. ID: " << hospital->doctores[indice].id << endl;
+    cout << "Especialidad: " << hospital->doctores[indice].especialidad << endl;
+    cout << "Años experiencia: " << hospital->doctores[indice].aniosExperiencia << endl;
+    cout << "Costo consulta: $" << hospital->doctores[indice].costoConsulta << endl;
+    
+    return &hospital->doctores[indice];
+}
+Doctor* buscarDoctorPorId(Hospital* hospital, int id) {
+    for (int i = 0; i < hospital->cantidadDoctores; i++) {
+        if (hospital->doctores[i].id == id) {
+            return &hospital->doctores[i];
+        }
+    }
+    
+    return nullptr; 
+}
+
+Doctor** buscardoctorporespecialidad(Hospital* hospital, const char* especialidad, int* cantidad) {
+    Doctor** resultados = new Doctor*[hospital->cantidadDoctores];
+    *cantidad = 0;
+    
+    for (int i = 0; i < hospital->cantidadDoctores; i++) {
+        if (strstr(hospital->doctores[i].especialidad, especialidad) != nullptr) {
+            resultados[*cantidad] = &hospital->doctores[i];
+            (*cantidad)++;
+        }
+    }
+    
+    return resultados; 
+}
+Doctor** buscarDoctoresPorEspecialidad(Hospital* hospital,
+                                      const char* especialidad,
+                                      int* cantidad) {
+    
+    if (!hospital || !especialidad || !cantidad) {
+        if (cantidad) *cantidad = 0;
+        return nullptr;
+    }
+   
+    *cantidad = 0;
+    for (int i = 0; i < hospital->cantidadDoctores; i++) {
+        if (strcmp(hospital->doctores[i].especialidad, especialidad) == 0) {
+            (*cantidad)++;
+        }
+    }
+    
+   
+    if (*cantidad == 0) {
+        cout << "No se encontraron doctores con especialidad: " << especialidad << endl;
+        return nullptr;
+    }
+    
+    
+    Doctor** resultados = new Doctor*[*cantidad];
+    
+    
+    int indice = 0;
+    for (int i = 0; i < hospital->cantidadDoctores; i++) {
+        if (strcmp(hospital->doctores[i].especialidad, especialidad) == 0) {
+            resultados[indice] = &hospital->doctores[i];
+            indice++;
+        }
+    }
+    
+    cout << "Encontrados " << *cantidad << " doctores en " << especialidad << endl;
+    return resultados;
+}
+void liberarResultadosDoctores(Doctor** resultados) {
+    if (resultados) {
+        delete[] resultados;
+    }
+}
+void mostrarDoctoresEspecialidad(Doctor** doctores, int cantidad) {
+    if (!doctores || cantidad == 0) {
+        cout << "No hay doctores para mostrar." << endl;
+        return;
+    }
+    
+    cout << "\n=== DOCTORES ENCONTRADOS ===" << endl;
+    cout << left << setw(4) << "ID" 
+         << setw(20) << "NOMBRE COMPLETO"
+         << setw(15) << "ESPECIALIDAD"
+         << setw(5) << "AÑOS"
+         << setw(10) << "COSTO"
+         << setw(10) << "ESTADO" 
+         << endl;
+    cout << string(70, '-') << endl;
+    
+    for (int i = 0; i < cantidad; i++) {
+        Doctor* d = doctores[i];
+        char nombreCompleto[100];
+        snprintf(nombreCompleto, sizeof(nombreCompleto), "%s %s", d->nombre, d->apellido);
+        
+        cout << left << setw(4) << d->id
+             << setw(20) << nombreCompleto
+             << setw(15) << d->especialidad
+             << setw(5) << d->aniosExperiencia
+             << setw(10) << d->costoConsulta
+             << setw(10) << (d->disponible ? "Activo" : "Inactivo")
+             << endl;
+    }
+    cout << string(70, '-') << endl;
+}
+bool asignarpacienteadoctor(Hospital* hospital, int idDoctor, int idPaciente) {
+    Doctor* doctor = buscarDoctorPorId(hospital, idDoctor);
+    if (!doctor) {
+        cout << "Error: No se encontró doctor con ID " << idDoctor << endl;
+        return false;
+    }
+    
+    Paciente* paciente = buscarPacientePorId(hospital, idPaciente);
+    if (!paciente) {
+        cout << "Error: No se encontró paciente con ID " << idPaciente << endl;
+        return false;
+    }
+    
+    for (int i = 0; i < doctor->cantidadPacientes; i++) {
+        if (doctor->pacientesAsignados[i] == idPaciente) {
+            cout << "El paciente ya está asignado al doctor." << endl;
+            return false;
+        }
+    }
+    
+    if (doctor->cantidadPacientes >= doctor->capacidadPacientes) {
+        int nuevaCapacidad = doctor->capacidadPacientes * 2;
+        int* nuevosPacientes = new int[nuevaCapacidad];
+        
+        for (int i = 0; i < doctor->cantidadPacientes; i++) {
+            nuevosPacientes[i] = doctor->pacientesAsignados[i];
+        }
+        
+        delete[] doctor->pacientesAsignados;
+        doctor->pacientesAsignados = nuevosPacientes;
+        doctor->capacidadPacientes = nuevaCapacidad;
+        
+        cout << "Capacidad de pacientes del doctor aumentada a " << nuevaCapacidad << endl;
+    }
+    
+    doctor->pacientesAsignados[doctor->cantidadPacientes] = idPaciente;
+    doctor->cantidadPacientes++;
+    
+    cout << "Paciente ID " << idPaciente << " asignado al Doctor ID " << idDoctor << " correctamente." << endl;
+    return true;
+}
+bool removerPacienteDeDoctor(Doctor* doctor, int idPaciente) {
+        if (!doctor) {
+        cout << "Error: Doctor no válido." << endl;
+        return false;
+    }
+    
+    if (doctor->cantidadPacientes == 0) {
+        cout << "El doctor no tiene pacientes asignados." << endl;
+        return false;
+    }
+    
+    
+    int indice = -1;
+    for (int i = 0; i < doctor->cantidadPacientes; i++) {
+        if (doctor->pacientesAsignados[i] == idPaciente) {
+            indice = i;
+            break;
+        }
+    }
+    
+    if (indice == -1) {
+        cout << "El paciente con ID " << idPaciente << " no está asignado a este doctor." << endl;
+        return false;
+    }
+    
+    // Compactar array (mover elementos hacia adelante)
+    for (int i = indice; i < doctor->cantidadPacientes - 1; i++) {
+        doctor->pacientesAsignados[i] = doctor->pacientesAsignados[i + 1];
+    }
+    
+    
+    doctor->cantidadPacientes--;
+    
+    cout << "Paciente con ID " << idPaciente << " removido del doctor "
+         << doctor->nombre << " " << doctor->apellido << endl;
+    cout << "Pacientes restantes asignados: " << doctor->cantidadPacientes << endl;
+    
+    return true;
+}
+void listarpacientesdedoctor(Hospital* hospital, int idDoctor) {
+    Doctor* doctor = buscarDoctorPorId(hospital, idDoctor);
+    if (!doctor) {
+        cout << "Error: No se encontró doctor con ID " << idDoctor << endl;
+        return;
+    }
+    
+    if (doctor->cantidadPacientes == 0) {
+        cout << "El doctor " << doctor->nombre << " " << doctor->apellido << " no tiene pacientes asignados." << endl;
+        return;
+    }
+    
+    cout << "\n=== PACIENTES ASIGNADOS AL DOCTOR " << doctor->nombre << " " << doctor->apellido << " ===" << endl;
+    cout << left << setw(4) << "ID" 
+         << setw(20) << "NOMBRE COMPLETO"
+         << setw(12) << "CÉDULA"
+         << setw(5) << "EDAD"
+         << endl;
+    cout << string( 50, '-') << endl;
+    
+    for (int i = 0; i < doctor->cantidadPacientes; i++) {
+        int idPaciente = doctor->pacientesAsignados[i];
+        Paciente* paciente = buscarPacientePorId(hospital, idPaciente);
+        if (paciente) {
+            char nombreCompleto[100];
+            snprintf(nombreCompleto, sizeof(nombreCompleto), "%s %s", paciente->nombre, paciente->apellido);
+            
+            cout << left << setw(4) << paciente->id
+                 << setw(20) << nombreCompleto
+                 << setw(12) << paciente->cedula
+                 << setw(5) << paciente->edad
+                 << endl;
+        }
+    }
+    cout << string( 50, '-') << endl;
+}
+void listardoctores(Hospital* hospital) {
+    if (hospital->cantidadDoctores == 0) {
+        cout << "No hay doctores registrados." << endl;
+        return;
+    }
+    
+    cout << "\nLISTA DE DOCTORES (" << hospital->cantidadDoctores << "):" << endl;
+    cout << "┌──────┬──────────────────────────┬──────────────┬───────────────┬────────────┐" << endl;
+    cout << "│  ID  │       NOMBRE COMPLETO    │  ESPECIALIDAD │ AÑOS EXPERIENCIA │  COSTO    │" << endl;
+    cout << "├──────┼──────────────────────────┼──────────────┼───────────────┼────────────┤" << endl;
+    
+    for (int i = 0; i < hospital->cantidadDoctores; i++) {
+        Doctor* d = &hospital->doctores[i];
+        
+        
+        char nombreCompleto[100];
+        snprintf(nombreCompleto, sizeof(nombreCompleto), "%s %s", d->nombre, d->apellido);
+        
+        if (strlen(nombreCompleto) > 22) {
+            nombreCompleto[19] = '.';
+            nombreCompleto[20] = '.';
+            nombreCompleto[21] = '.';
+            nombreCompleto[22] = '\0';
+        }
+        
+        printf("│ %4d │ %-24s │ %-12s │     %4d     │ $%8.2f │\n", 
+               d->id, nombreCompleto, d->especialidad, d->aniosExperiencia, d->costoConsulta);
+    }
+    
+    cout << "└──────┴──────────────────────────┴──────────────┴───────────────┴────────────┘" << endl;
+
+}
+bool eliminarDoctor(Hospital* hospital, int id) {
+    // Buscar el índice del doctor
+    int indice = -1;
+    for (int i = 0; i < hospital->cantidadDoctores; i++) {
+        if (hospital->doctores[i].id == id) {
+            indice = i;
+            break;
+        }
+    }
+    
+    if (indice == -1) {
+        cout << "Error: No se encontró doctor con ID " << id << endl;
+        return false;
+    }
+    
+    Doctor* doctor = &hospital->doctores[indice];
+    // Liberar memoria de los arreglos dinámicos del doctor
+    delete[] doctor->pacientesAsignados;
+    delete[] doctor->citasAgendadas;
+    
+    
+    for (int i = 0; i < hospital->cantidadCitas; i++) {
+        if (hospital->citas[i].idDoctor == id) {
+            strcpy(hospital->citas[i].estado, "CANCELADA");
+            hospital->citas[i].atendida = false;
+            
+            
+            for (int j = 0; j < hospital->cantidadPacientes; j++) {
+                for (int k = 0; k < hospital->pacientes[j].cantidadCitas; k++) {
+                    if (hospital->pacientes[j].citasAgendadas[k] == hospital->citas[i].id) {
+                        // Mover citas restantes hacia adelante
+                        for (int l = k; l < hospital->pacientes[j].cantidadCitas - 1; l++) {
+                            hospital->pacientes[j].citasAgendadas[l] = hospital->pacientes[j].citasAgendadas[l + 1];
+                        }
+                        hospital->pacientes[j].cantidadCitas--;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    
+    
+    //  Compactar el arreglo de doctores 
+    for (int i = indice; i < hospital->cantidadDoctores - 1; i++) {
+        hospital->doctores[i] = hospital->doctores[i + 1];
+    }
+    
+    hospital->cantidadDoctores--;
+    
+    cout << "Doctor con ID " << id << " eliminado correctamente." << endl;
+    cout << "Citas asociadas canceladas y memoria liberada." << endl;
+    
+    return true;
+}
