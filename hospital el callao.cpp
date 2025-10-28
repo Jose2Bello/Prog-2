@@ -963,3 +963,161 @@ bool eliminarDoctor(Hospital* hospital, int id) {
     
     return true;
 }
+Cita* agendarCita(Hospital* hospital, int idPaciente, int idDoctor,
+                 const char* fecha, const char* hora, const char* motivo) {
+    
+    // Validaciones básicas de parámetros
+    if (!hospital || !fecha || !hora || !motivo) {
+        cout << "Error: Parámetros inválidos." << endl;
+        return nullptr;
+    }
+    
+    // Verificar que el paciente exista
+    Paciente* paciente = buscarPacientePorId(hospital, idPaciente);
+    if (!paciente) {
+        cout << "Error: No existe paciente con ID " << idPaciente << endl;
+        return nullptr;
+    }
+    
+    //  Verificar que el doctor exista
+    Doctor* doctor = buscarDoctorPorId(hospital, idDoctor);
+    if (!doctor) {
+        cout << "Error: No existe doctor con ID " << idDoctor << endl;
+        return nullptr;
+    }
+    
+    // Verificar que el doctor esté disponible
+    if (!doctor->disponible) {
+        cout << "Error: El doctor no está disponible." << endl;
+        return nullptr;
+    }
+    
+    // Validar formato de fecha (YYYY-MM-DD)
+    if (strlen(fecha) != 10 || fecha[4] != '-' || fecha[7] != '-') {
+        cout << "Error: Formato de fecha inválido. Use YYYY-MM-DD" << endl;
+        return nullptr;
+    }
+    
+    // Validar que los componentes de la fecha sean números
+    for (int i = 0; i < 10; i++) {
+        if (i != 4 && i != 7 && !isdigit(fecha[i])) {
+            cout << "Error: La fecha debe contener solo números y guiones." << endl;
+            return nullptr;
+        }
+    }
+    
+    //  Validar formato de hora (HH:MM)
+    if (strlen(hora) != 5 || hora[2] != ':') {
+        cout << "Error: Formato de hora inválido. Use HH:MM" << endl;
+        return nullptr;
+    }
+    
+    // Validar que los componentes de la hora sean números
+    for (int i = 0; i < 5; i++) {
+        if (i != 2 && !isdigit(hora[i])) {
+            cout << "Error: La hora debe contener solo números y dos puntos." << endl;
+            return nullptr;
+        }
+    }
+    
+    // Validar rango de hora (00-23:00-59)
+    int horas = atoi(hora);
+    int minutos = atoi(hora + 3);
+    if (horas < 0 || horas > 23 || minutos < 0 || minutos > 59) {
+        cout << "Error: Hora fuera de rango. Use HH:MM entre 00:00 y 23:59" << endl;
+        return nullptr;
+    }
+    
+    //Verificar disponibilidad del doctor (no deberia tener otra cita a esa hora/fecha)
+    for (int i = 0; i < hospital->cantidadCitas; i++) {
+        if (hospital->citas[i].idDoctor == idDoctor &&
+            strcmp(hospital->citas[i].fecha, fecha) == 0 &&
+            strcmp(hospital->citas[i].hora, hora) == 0 &&
+            strcmp(hospital->citas[i].estado, "AGENDADA") == 0) {
+            cout << "Error: El doctor ya tiene una cita agendada para " << fecha << " a las " << hora << endl;
+            return nullptr;
+        }
+    }
+    
+    // Verificar que el paciente no tenga otra cita a la misma hora
+    for (int i = 0; i < hospital->cantidadCitas; i++) {
+        if (hospital->citas[i].idPaciente == idPaciente &&
+            strcmp(hospital->citas[i].fecha, fecha) == 0 &&
+            strcmp(hospital->citas[i].hora, hora) == 0 &&
+            strcmp(hospital->citas[i].estado, "AGENDADA") == 0) {
+            cout << "Error: El paciente ya tiene una cita agendada para " << fecha << " a las " << hora << endl;
+            return nullptr;
+        }
+    }
+    
+    // Redimensionar arreglo de citas si está lleno
+    if (hospital->cantidadCitas >= hospital->capacidadCitas) {
+        int nuevaCapacidad = hospital->capacidadCitas * 2;
+        Cita* nuevasCitas = new Cita[nuevaCapacidad];
+        
+        
+        for (int i = 0; i < hospital->cantidadCitas; i++) {
+            nuevasCitas[i] = hospital->citas[i];
+        }
+        delete[] hospital->citas;
+        hospital->citas = nuevasCitas;
+        hospital->capacidadCitas = nuevaCapacidad;
+        
+        cout << "Capacidad de citas aumentada a " << nuevaCapacidad << endl;
+    }
+    
+    // Obtener índice de la nueva cita
+    int indice = hospital->cantidadCitas;
+    
+    // Crear estructura Cita
+    hospital->citas[indice].id = hospital->siguienteIdCita++;
+    hospital->citas[indice].idPaciente = idPaciente;
+    hospital->citas[indice].idDoctor = idDoctor;
+    strcpy(hospital->citas[indice].fecha, fecha);
+    strcpy(hospital->citas[indice].hora, hora);
+    strcpy(hospital->citas[indice].motivo, motivo);
+    strcpy(hospital->citas[indice].estado, "AGENDADA");
+    strcpy(hospital->citas[indice].observaciones, "");
+    hospital->citas[indice].atendida = false;
+    
+    // Agregar ID de cita al array del paciente
+    if (paciente->cantidadCitas >= paciente->capacidadCitas) {
+        int nuevaCapacidad = paciente->capacidadCitas * 2;
+        int* nuevasCitasPaciente = new int[nuevaCapacidad];
+        
+        for (int i = 0; i < paciente->cantidadCitas; i++) {
+            nuevasCitasPaciente[i] = paciente->citasAgendadas[i];
+        }
+        
+        delete[] paciente->citasAgendadas;
+        paciente->citasAgendadas = nuevasCitasPaciente;
+        paciente->capacidadCitas = nuevaCapacidad;
+    }
+    paciente->citasAgendadas[paciente->cantidadCitas++] = hospital->citas[indice].id;
+    
+    // Agregar ID de cita al arreglo del doctor
+    if (doctor->cantidadCitas >= doctor->capacidadCitas) {
+        int nuevaCapacidad = doctor->capacidadCitas * 2;
+        int* nuevasCitasDoctor = new int[nuevaCapacidad];
+        
+        for (int i = 0; i < doctor->cantidadCitas; i++) {
+            nuevasCitasDoctor[i] = doctor->citasAgendadas[i];
+        }
+        
+        delete[] doctor->citasAgendadas;
+        doctor->citasAgendadas = nuevasCitasDoctor;
+        doctor->capacidadCitas = nuevaCapacidad;
+    }
+    doctor->citasAgendadas[doctor->cantidadCitas++] = hospital->citas[indice].id;
+    
+    
+    hospital->cantidadCitas++;
+    
+    cout << "Cita agendada exitosamente. ID: " << hospital->citas[indice].id << endl;
+    cout << "Paciente: " << paciente->nombre << " " << paciente->apellido << endl;
+    cout << "Doctor: " << doctor->nombre << " " << doctor->apellido << endl;
+    cout << "Fecha: " << fecha << " " << hora << endl;
+    cout << "Motivo: " << motivo << endl;
+    
+    return &hospital->citas[indice];
+}
