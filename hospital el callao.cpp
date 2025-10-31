@@ -2131,7 +2131,7 @@ void menuGestionPacientes(Hospital* hospital) {
                 cout << " No se pudo eliminar el paciente." << endl;
             }
         } else {
-            cout << "✅ Eliminación cancelada." << endl;
+            cout << " Eliminación cancelada." << endl;
         }
     } else {
         cout << " Eliminación cancelada." << endl;
@@ -2195,7 +2195,7 @@ void menuGestionDoctores(Hospital* hospital) {
                 Doctor* doctor = crearDoctor(hospital, nombre, apellido, cedula, 
                                            especialidad, aniosExperiencia, costoConsulta);
                 if (doctor) {
-                    cout << "✅ Doctor registrado exitosamente." << endl;
+                    cout << " Doctor registrado exitosamente." << endl;
                 }
                 break;
             }
