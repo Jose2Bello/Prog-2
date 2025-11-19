@@ -29,32 +29,40 @@ const char * obtenerNombreMes(int mes);
 void limpiarBuffer();
 void pausarPantalla();
 
+struct ArchivoHeader {
+    int cantidadRegistros;     // Total de registros físicos
+    int proximoID;            // Siguiente ID disponible  
+    int registrosActivos;     // Registros no eliminados
+    int version;              // Versión del formato
+    time_t fechaCreacion;
+    time_t fechaUltimaModificacion;
+    char tipoArchivo[20];     // "PACIENTES", "DOCTORES", etc.
+    
+    // Para optimizar listas enlazadas
+    int ultimoIDUtilizado;    // Último ID asignado (para evitar saltos)
+};
 //strucs de hospital, paciente, historial medico, doctor y cita
 
 struct Hospital {
     char nombre[100];
     char direccion[150];
     char telefono[15];
-
-    Paciente * pacientes;
-    int cantidadPacientes;
-    int capacidadPacientes;
-
-    Doctor * doctores;
-    int cantidadDoctores;
-    int capacidadDoctores;
-
-    Cita * citas;
-    int cantidadCitas;
-    int capacidadCitas;
-
-    int siguienteIdPaciente;
-    int siguienteIdDoctor;
-    int siguienteIdCita;
-    int siguienteIdConsulta;
+    
+    
+    int siguienteIDPaciente;
+    int siguienteIDDoctor;
+    int siguienteIDCita;
+    int siguienteIDConsulta;
+    
+   
+    int totalPacientesRegistrados;
+    int totalDoctoresRegistrados;
+    int totalCitasAgendadas;
+    int totalConsultasRealizadas;
 };
 
 struct Paciente {
+    
     int id;
     char nombre[50];
     char apellido[50];
@@ -65,19 +73,16 @@ struct Paciente {
     char telefono[15];
     char direccion[100];
     char email[50];
-
-    HistorialMedico * historial;
-    int cantidadConsultas;
-    int capacidadHistorial;
-
-    int * citasAgendadas;
-    int cantidadCitas;
-    int capacidadCitas;
-
     char alergias[500];
     char observaciones[500];
-
     bool activo;
+    int cantidadConsultas;          
+    int primerConsultaID;          
+    int cantidadCitas;              
+    int citasIDs[20];               
+    bool eliminado;                 
+    time_t fechaCreacion;
+    time_t fechaModificacion;
 };
 
 struct HistorialMedico {
@@ -126,6 +131,278 @@ struct Cita {
     bool atendida;
 };
 
+
+bool inicializarArchivo(const char* nombreArchivo) {
+    ofstream archivo(nombreArchivo, ios::binary | ios::out);
+    if (!archivo.is_open()) {
+        cout << "Error: No se pudo crear el archivo " << nombreArchivo << endl;
+        return false;
+    }
+    
+    // Determinar tipo de archivo basado en el nombre
+    const char* tipo = determinarTipoArchivo(nombreArchivo);
+    
+    // Crear header con valores iniciales
+    ArchivoHeader header;
+    header.cantidadRegistros = 0;
+    header.proximoID = 1;
+    header.registrosActivos = 0;
+    header.version = 1;
+    header.fechaCreacion = time(nullptr);
+    header.fechaUltimaModificacion = time(nullptr);
+    header.ultimoIDUtilizado = 0;
+    
+    // Copiar tipo de archivo
+    strncpy(header.tipoArchivo, tipo, sizeof(header.tipoArchivo) - 1);
+    header.tipoArchivo[sizeof(header.tipoArchivo) - 1] = '\0';
+    
+    // Escribir header al archivo
+    archivo.write(reinterpret_cast<const char*>(&header), sizeof(ArchivoHeader));
+    
+    //  Verificar que se escribió correctamente
+    if (archivo.fail()) {
+        cout << "Error: No se pudo escribir el header en " << nombreArchivo << endl;
+        archivo.close();
+        return false;
+    }
+    
+    archivo.close();
+    
+    cout << "Archivo inicializado: " << nombreArchivo 
+         << " (Tipo: " << tipo << ")" << endl;
+    return true;
+}
+
+// Función auxiliar para determinar tipo de archivo
+const char* determinarTipoArchivo(const char* nombreArchivo) {
+    if (strstr(nombreArchivo, "pacientes") != nullptr) return "PACIENTES";
+    if (strstr(nombreArchivo, "doctores") != nullptr) return "DOCTORES";
+    if (strstr(nombreArchivo, "citas") != nullptr) return "CITAS";
+    if (strstr(nombreArchivo, "historiales") != nullptr) return "HISTORIALES";
+    if (strstr(nombreArchivo, "hospital") != nullptr) return "HOSPITAL";
+    return "GENERAL";
+}
+
+bool verificarArchivo(const char* nombreArchivo) {
+    //  Intentar abrir archivo para lectura
+    ifstream archivo(nombreArchivo, ios::binary);
+    if (!archivo.is_open()) {
+        cout << "? Error: No se puede abrir el archivo " << nombreArchivo << endl;
+        return false;
+    }
+    
+    // Verificar que el archivo tenga al menos el tamaño del header
+    archivo.seekg(0, ios::end);
+    streampos fileSize = archivo.tellg();
+    archivo.seekg(0, ios::beg);
+    
+    if (fileSize < static_cast<streampos>(sizeof(ArchivoHeader))) {
+        cout << "? Error: Archivo " << nombreArchivo 
+             << " está corrupto (tamaño insuficiente: " << fileSize << " bytes)" << endl;
+        archivo.close();
+        return false;
+    }
+    
+    // Leer header
+    ArchivoHeader header;
+    archivo.read(reinterpret_cast<char*>(&header), sizeof(ArchivoHeader));
+    
+    if (archivo.fail()) {
+        cout << "? Error: No se pudo leer el header de " << nombreArchivo << endl;
+        archivo.close();
+        return false;
+    }
+    
+    archivo.close();
+    
+    //  Validar campos críticos del header
+    bool valido = true;
+    string errores;
+    
+    // Validar versión
+    if (header.version != 1) {
+        errores += "Versión inválida (" + to_string(header.version) + "), esperada 1. ";
+        valido = false;
+    }
+    
+    // Validar contadores no negativos
+    if (header.cantidadRegistros < 0) {
+        errores += "cantidadRegistros negativo. ";
+        valido = false;
+    }
+    
+    if (header.proximoID < 1) {
+        errores += "proximoID inválido. ";
+        valido = false;
+    }
+    
+    if (header.registrosActivos < 0 || header.registrosActivos > header.cantidadRegistros) {
+        errores += "registrosActivos inconsistente. ";
+        valido = false;
+    }
+    
+    // Validar fechas (no pueden ser futuras)
+    time_t ahora = time(nullptr);
+    if (header.fechaCreacion > ahora) {
+        errores += "fechaCreación en futuro. ";
+        valido = false;
+    }
+    
+    if (header.fechaUltimaModificacion > ahora) {
+        errores += "fechaModificación en futuro. ";
+        valido = false;
+    }
+    
+    // Validar tipo de archivo
+    if (strlen(header.tipoArchivo) == 0 || strlen(header.tipoArchivo) >= sizeof(header.tipoArchivo)) {
+        errores += "tipoArchivo inválido. ";
+        valido = false;
+    }
+    
+    // Mostrar resultado
+    if (valido) {
+        cout << "? Archivo válido: " << nombreArchivo << endl;
+        cout << "   Tipo: " << header.tipoArchivo 
+             << " | Registros: " << header.registrosActivos << "/" << header.cantidadRegistros
+             << " | Próximo ID: " << header.proximoID << endl;
+    } else {
+        cout << "? Archivo inválido: " << nombreArchivo << " - " << errores << endl;
+    }
+    
+    return valido;
+}
+
+
+ArchivoHeader leerHeader(const char* nombreArchivo, bool mostrarInfo = false) {
+    ArchivoHeader header;
+    
+    // Valores por defecto para header inválido
+    memset(&header, 0, sizeof(header));
+    header.proximoID = 1;
+    header.version = 1;
+    header.fechaCreacion = time(nullptr);
+    header.fechaUltimaModificacion = header.fechaCreacion;
+    strcpy(header.tipoArchivo, "INVALIDO");
+    
+    // Intentar leer archivo
+    ifstream archivo(nombreArchivo, ios::binary);
+    if (!archivo.is_open()) {
+        if (mostrarInfo) {
+            cout << "? No existe: " << nombreArchivo << endl;
+        }
+        return header;
+    }
+    
+    // Verificar tamaño
+    archivo.seekg(0, ios::end);
+    long tamaño = archivo.tellg();
+    archivo.seekg(0, ios::beg);
+    
+    if (tamaño < static_cast<long>(sizeof(ArchivoHeader))) {
+        if (mostrarInfo) {
+            cout << "? Tamaño insuficiente: " << nombreArchivo 
+                 << " (" << tamaño << "/" << sizeof(ArchivoHeader) << " bytes)" << endl;
+        }
+        archivo.close();
+        return header;
+    }
+    
+    // Leer header
+    if (!archivo.read(reinterpret_cast<char*>(&header), sizeof(ArchivoHeader))) {
+        if (mostrarInfo) {
+            cout << "? Error de lectura: " << nombreArchivo << endl;
+        }
+        archivo.close();
+        return header;
+    }
+    
+    archivo.close();
+    
+    // Mostrar información si se solicita
+    if (mostrarInfo) {
+        cout << "?? HEADER de " << nombreArchivo << ":" << endl;
+        cout << "   +-- Tipo: " << header.tipoArchivo << endl;
+        cout << "   +-- Versión: " << header.version << endl;
+        cout << "   +-- Registros: " << header.registrosActivos << "/" << header.cantidadRegistros << endl;
+        cout << "   +-- Próximo ID: " << header.proximoID << endl;
+        
+        // Formatear fechas
+        char fechaCreacion[20], fechaModificacion[20];
+        strftime(fechaCreacion, sizeof(fechaCreacion), "%Y-%m-%d %H:%M", 
+                localtime(&header.fechaCreacion));
+        strftime(fechaModificacion, sizeof(fechaModificacion), "%Y-%m-%d %H:%M", 
+                localtime(&header.fechaUltimaModificacion));
+        
+        cout << "   +-- Creado: " << fechaCreacion << endl;
+        cout << "   +-- Modificado: " << fechaModificacion << endl;
+    }
+    
+    return header;
+}
+
+bool actualizarHeader(const char* nombreArchivo, ArchivoHeader header) {
+    // 1. Verificar que el archivo existe y es accesible
+    if (!archivoExiste(nombreArchivo)) {
+        cout << "? Error: " << nombreArchivo << " no existe" << endl;
+        return false;
+    }
+    
+    // 2. Abrir en modo lectura/escritura
+    fstream archivo(nombreArchivo, ios::binary | ios::in | ios::out);
+    if (!archivo.is_open()) {
+        cout << "? Error: No se puede abrir " << nombreArchivo << " para escritura" << endl;
+        return false;
+    }
+    
+    // 3. Validar header antes de escribir
+    if (header.proximoID < 1) {
+        cout << "??  Advertencia: próximoID inválido (" << header.proximoID << "), ajustando a 1" << endl;
+        header.proximoID = 1;
+    }
+    
+    if (header.registrosActivos < 0) {
+        cout << "??  Advertencia: registrosActivos negativo, ajustando a 0" << endl;
+        header.registrosActivos = 0;
+    }
+    
+    if (header.registrosActivos > header.cantidadRegistros) {
+        cout << "??  Advertencia: registrosActivos > cantidadRegistros, ajustando" << endl;
+        header.registrosActivos = header.cantidadRegistros;
+    }
+    
+    // 4. Actualizar metadata
+    header.fechaUltimaModificacion = time(nullptr);
+    
+    // 5. Posicionarse al inicio y escribir
+    archivo.seekp(0, ios::beg);
+    archivo.write(reinterpret_cast<const char*>(&header), sizeof(ArchivoHeader));
+    
+    // 6. Forzar escritura a disco
+    archivo.flush();
+    
+    bool exito = !archivo.fail();
+    archivo.close();
+    
+    if (exito) {
+        cout << "? Header actualizado: " << nombreArchivo << endl;
+        cout << "   ?? Nuevos valores - Registros: " << header.registrosActivos 
+             << "/" << header.cantidadRegistros << " | Próximo ID: " << header.proximoID << endl;
+    } else {
+        cout << "? Error crítico: No se pudo escribir header en " << nombreArchivo << endl;
+    }
+    
+    return exito;
+}
+
+
+
+
+
+
+
+
+
+
 //funcion para liberar memoria del hospital
 
 void liberarHospital(Hospital * hospital) {
@@ -162,15 +439,263 @@ Paciente * buscarPacientePorCedula(Hospital * hospital,
     return nullptr;
 }
 
-Paciente * buscarPacientePorId(Hospital * hospital, int id) {
-    for (int i = 0; i < hospital -> cantidadPacientes; i++) {
-        if (hospital -> pacientes[i].id == id) {
-            return & hospital -> pacientes[i];
-        }
+Paciente buscarPacientePorID(int id) {
+    Paciente paciente;
+    // Inicializar paciente vacío en caso de no encontrarlo
+    memset(&paciente, 0, sizeof(Paciente));
+    paciente.id = -1; // Marcar como no encontrado
+    
+    //  Abrir pacientes.bin
+    ifstream archivo("pacientes.bin", ios::binary);
+    if (!archivo.is_open()) {
+        cout << "? Error: No se puede abrir pacientes.bin" << endl;
+        return paciente;
     }
-
-    return nullptr;
+    
+    //  Leer header para saber cantidad de registros
+    ArchivoHeader header;
+    archivo.read(reinterpret_cast<char*>(&header), sizeof(ArchivoHeader));
+    
+    if (archivo.fail()) {
+        cout << "? Error: No se puede leer header de pacientes.bin" << endl;
+        archivo.close();
+        return paciente;
+    }
+    
+    // Verificar si hay registros
+    if (header.cantidadRegistros == 0) {
+        cout << "??  No hay pacientes registrados" << endl;
+        archivo.close();
+        return paciente;
+    }
+    
+    //  Saltar header: seekg(sizeof(ArchivoHeader))
+    archivo.seekg(sizeof(ArchivoHeader), ios::beg);
+    
+    // Bucle: leer cada paciente hasta encontrar ID o EOF
+    bool encontrado = false;
+    int pacientesLeidos = 0;
+    
+    while (pacientesLeidos < header.cantidadRegistros && 
+           archivo.read(reinterpret_cast<char*>(&paciente), sizeof(Paciente))) {
+        
+        // Verificar si es el paciente buscado y está activo
+        if (paciente.id == id && !paciente.eliminado) {
+            encontrado = true;
+            break;
+        }
+        
+        pacientesLeidos++;
+    }
+    
+    //  Cerrar archivo
+    archivo.close();
+    
+    //  Retornar paciente encontrado (o paciente vacío si no existe)
+    if (!encontrado) {
+        memset(&paciente, 0, sizeof(Paciente));
+        paciente.id = -1;
+        cout << "? Paciente con ID " << id << " no encontrado" << endl;
+    } else {
+        cout << "? Paciente encontrado: " << paciente.nombre << " " << paciente.apellido << endl;
+    }
+    
+    return paciente;
 }
+
+bool agregarPaciente(Paciente nuevoPaciente) {
+    // Validaciones iniciales
+    if (strlen(nuevoPaciente.nombre) == 0 || strlen(nuevoPaciente.apellido) == 0) {
+        cout << "? Error: Nombre y apellido son obligatorios" << endl;
+        return false;
+    }
+    
+    if (strlen(nuevoPaciente.cedula) == 0) {
+        cout << "? Error: Cédula es obligatoria" << endl;
+        return false;
+    }
+    
+    // Verificar que no exista paciente con misma cédula
+    Paciente existente = buscarPacientePorCedula(nuevoPaciente.cedula);
+    if (existente.id != -1) {
+        cout << "? Error: Ya existe un paciente con cédula " << nuevoPaciente.cedula << endl;
+        return false;
+    }
+    
+    //  Leer header actual
+    ArchivoHeader header;
+    if (!leerHeader("pacientes.bin", header)) {
+        cout << "? Error: No se puede leer header de pacientes.bin" << endl;
+        return false;
+    }
+    
+    //  Asignar ID y preparar paciente
+    nuevoPaciente.id = header.proximoID;
+    inicializarPaciente(nuevoPaciente);
+    
+    // Abrir en modo append
+    ofstream archivo("pacientes.bin", ios::binary | ios::app);
+    if (!archivo.is_open()) {
+        cout << "? Error: No se puede abrir pacientes.bin en modo append" << endl;
+        return false;
+    }
+    
+    //  Escribir registro
+    archivo.write(reinterpret_cast<const char*>(&nuevoPaciente), sizeof(Paciente));
+    bool exitoEscritura = archivo.good();
+    archivo.close();
+    
+    if (!exitoEscritura) {
+        cout << "? Error crítico: Fallo en escritura de paciente" << endl;
+        return false;
+    }
+    
+    //  Actualizar header
+    header.cantidadRegistros++;
+    header.proximoID++;
+    header.registrosActivos++;
+    header.fechaUltimaModificacion = time(nullptr);
+    
+    // Actualizar header en archivo
+    if (actualizarHeader("pacientes.bin", header)) {
+        cout << "? PACIENTE AGREGADO EXITOSAMENTE" << endl;
+        mostrarResumenPaciente(nuevoPaciente);
+        return true;
+    } else {
+        cout << "? ERROR: Paciente escrito pero header corrupto" << endl;
+        return false;
+    }
+}
+
+void inicializarPaciente(Paciente& paciente) {
+    paciente.eliminado = false;
+    paciente.cantidadConsultas = 0;
+    paciente.primerConsultaID = -1;
+    paciente.cantidadCitas = 0;
+    
+    // Inicializar array de citas
+    for (int i = 0; i < 20; i++) {
+        paciente.citasIDs[i] = -1;
+    }
+    
+    // Timestamps
+    time_t ahora = time(nullptr);
+    paciente.fechaCreacion = ahora;
+    paciente.fechaModificacion = ahora;
+    
+    // Validar y ajustar campos
+    if (paciente.edad < 0 || paciente.edad > 150) {
+        cout << "??  Edad inválida (" << paciente.edad << "), ajustando a 0" << endl;
+        paciente.edad = 0;
+    }
+    
+    // Asegurar que sexo sea válido
+    if (paciente.sexo != 'M' && paciente.sexo != 'F') {
+        cout << " Sexo inválido (" << paciente.sexo << "), ajustando a 'M'" << endl;
+        paciente.sexo = 'M';
+    }
+}
+
+void mostrarResumenPaciente(const Paciente& paciente) {
+    cout << "    RESUMEN DEL PACIENTE:" << endl;
+    cout << "   +-- ID: " << paciente.id << endl;
+    cout << "   +-- Nombre: " << paciente.nombre << " " << paciente.apellido << endl;
+    cout << "   +-- Cédula: " << paciente.cedula << endl;
+    cout << "   +-- Edad: " << paciente.edad << " años" << endl;
+    cout << "   +-- Sexo: " << (paciente.sexo == 'M' ? "Masculino" : "Femenino") << endl;
+    cout << "   +-- Teléfono: " << paciente.telefono << endl;
+    
+    // Mostrar fecha de creación formateada
+    char fechaStr[20];
+    strftime(fechaStr, sizeof(fechaStr), "%Y-%m-%d %H:%M", 
+             localtime(&paciente.fechaCreacion));
+    cout << "    Registrado: " << fechaStr << endl;
+}
+
+Paciente leerPacientePorIndice(int indice) {
+    Paciente p;
+    memset(&p, 0, sizeof(Paciente));
+    p.id = -1; // Marcador de error
+    
+    // Validar índice
+    if (indice < 0) {
+        cout << "? Error: Índice negativo (" << indice << ")" << endl;
+        return p;
+    }
+    
+    //  Abrir archivo
+    ifstream archivo("pacientes.bin", ios::binary);
+    if (!archivo.is_open()) {
+        cout << " Error: No se puede abrir pacientes.bin" << endl;
+        return p;
+    }
+    
+    //  Leer header para verificar límites
+    ArchivoHeader header;
+    if (!archivo.read(reinterpret_cast<char*>(&header), sizeof(ArchivoHeader))) {
+        cout << " Error: No se puede leer header" << endl;
+        archivo.close();
+        return p;
+    }
+    
+    // Verificar que el índice esté dentro de los límites
+    if (indice >= header.cantidadRegistros) {
+        cout << " Error: Índice " << indice << " fuera de rango (máximo: " 
+             << header.cantidadRegistros - 1 << ")" << endl;
+        archivo.close();
+        return p;
+    }
+    
+    //  Calcular posición exacta
+    long posicion = calcularPosicion(indice);
+    
+    //. Ir directamente a esa posición
+    archivo.seekg(posicion);
+    if (archivo.fail()) {
+        cout << "? Error: No se puede posicionar en índice " << indice << endl;
+        archivo.close();
+        return p;
+    }
+    
+    //  Leer estructura completa
+    archivo.read(reinterpret_cast<char*>(&p), sizeof(Paciente));
+    
+    if (archivo.fail()) {
+        cout << "? Error: Fallo al leer paciente en índice " << indice << endl;
+        memset(&p, 0, sizeof(Paciente));
+        p.id = -1;
+    } else if (p.eliminado) {
+        cout << " Paciente en índice " << indice << " está eliminado" << endl;
+        p.id = -2; // Código especial para eliminado
+    } else {
+        cout << " Paciente leído por índice " << indice << ": " 
+             << p.nombre << " " << p.apellido << endl;
+    }
+    
+    archivo.close();
+    return p;
+}
+
+// Función auxiliar para calcular posición
+long calcularPosicion(int indice) {
+    return sizeof(ArchivoHeader) + (indice * sizeof(Paciente));
+}
+
+Paciente leerPacientePorID(int id) {
+    
+    return buscarPacientePorID(id);
+}
+
+
+
+
+
+
+
+
+
+
+
 
 Paciente ** buscarPacientesPorNombre(Hospital * hospital,
     const char * nombre, int * cantidad) {
@@ -236,7 +761,7 @@ Paciente * crearPaciente(Hospital * hospital,
     hospital -> pacientes[indice].cantidadConsultas = 0;
 
     if (!hospital -> pacientes[indice].historial) {
-        cout << "Error crítico: No se pudo asignar memoria para historial médico" << endl;
+        cout << "Error crÃ­tico: No se pudo asignar memoria para historial mÃ©dico" << endl;
         return nullptr;
     }
 
@@ -245,7 +770,7 @@ Paciente * crearPaciente(Hospital * hospital,
     hospital -> pacientes[indice].cantidadCitas = 0;
 
     if (!hospital -> pacientes[indice].citasAgendadas) {
-        cout << "Error crítico: No se pudo asignar memoria para citas agendadas" << endl;
+        cout << "Error crÃ­tico: No se pudo asignar memoria para citas agendadas" << endl;
         delete[] hospital -> pacientes[indice].historial; // Liberar memoria ya asignada
         return nullptr;
     }
@@ -279,7 +804,7 @@ Paciente * crearPaciente(Hospital * hospital,
     cout << "   Paciente creado exitosamente:" << endl;
     cout << "   ID: " << hospital -> pacientes[indice].id << endl;
     cout << "   Nombre: " << hospital -> pacientes[indice].nombre << " " << hospital -> pacientes[indice].apellido << endl;
-    cout << "   Cédula: " << hospital -> pacientes[indice].cedula << endl;
+    cout << "   CÃ©dula: " << hospital -> pacientes[indice].cedula << endl;
     cout << "   Edad: " << hospital -> pacientes[indice].edad << endl;
     cout << "   Sexo: " << hospital -> pacientes[indice].sexo << endl;
 
@@ -290,7 +815,7 @@ bool actualizarPaciente(Hospital * hospital, int id) {
     Paciente * paciente = buscarPacientePorId(hospital, id);
 
     if (!paciente) {
-        cout << "Error: No se encontró paciente con ID " << id << endl;
+        cout << "Error: No se encontrÃ³ paciente con ID " << id << endl;
         return false;
     }
 
@@ -343,7 +868,7 @@ bool actualizarPaciente(Hospital * hospital, int id) {
         if (nuevaEdad > 0 && nuevaEdad <= 150) {
             paciente -> edad = nuevaEdad;
         } else {
-            cout << "Edad no válida. Manteniendo valor actual." << endl;
+            cout << "Edad no vÃ¡lida. Manteniendo valor actual." << endl;
         }
     }
 
@@ -355,19 +880,19 @@ bool actualizarPaciente(Hospital * hospital, int id) {
         if (nuevoSexo == 'M' || nuevoSexo == 'F') {
             paciente -> sexo = nuevoSexo;
         } else {
-            cout << "Sexo no válido. Use M o F. Manteniendo valor actual." << endl;
+            cout << "Sexo no vÃ¡lido. Use M o F. Manteniendo valor actual." << endl;
         }
     }
 
-    cout << "Teléfono actual: " << paciente -> telefono << endl;
-    cout << "Nuevo teléfono: ";
+    cout << "TelÃ©fono actual: " << paciente -> telefono << endl;
+    cout << "Nuevo telÃ©fono: ";
     cin.getline(buffer, sizeof(buffer));
     if (strlen(buffer) > 0) {
         strcpy(paciente -> telefono, buffer);
     }
 
-    cout << "Dirección actual: " << paciente -> direccion << endl;
-    cout << "Nueva dirección: ";
+    cout << "DirecciÃ³n actual: " << paciente -> direccion << endl;
+    cout << "Nueva direcciÃ³n: ";
     cin.getline(buffer, sizeof(buffer));
     if (strlen(buffer) > 0) {
         strcpy(paciente -> direccion, buffer);
@@ -416,13 +941,13 @@ bool eliminarPaciente(Hospital * hospital, int id) {
     }
 
     if (indice == -1) {
-        cout << "Error: No se encontró paciente con ID " << id << endl;
+        cout << "Error: No se encontrÃ³ paciente con ID " << id << endl;
         return false;
     }
 
     Paciente * paciente = & hospital -> pacientes[indice];
 
-    // Liberar memoria de los arregloss dinámicos del paciente
+    // Liberar memoria de los arregloss dinÃ¡micos del paciente
     delete[] paciente -> historial;
     delete[] paciente -> citasAgendadas;
 
@@ -432,7 +957,7 @@ bool eliminarPaciente(Hospital * hospital, int id) {
             strcpy(hospital -> citas[i].estado, "CANCELADA");
             hospital -> citas[i].atendida = false;
 
-            // También remover esta cita de los doctores
+            // TambiÃ©n remover esta cita de los doctores
             for (int j = 0; j < hospital -> cantidadDoctores; j++) {
                 if (hospital -> doctores[j].id == hospital -> citas[i].idDoctor) {
                     // Buscar y eliminar la cita del array del doctor
@@ -484,8 +1009,8 @@ void listarPacientes(Hospital * hospital) {
 
     cout << "\nLISTA DE PACIENTES (" << hospital -> cantidadPacientes << "):" << endl;
     cout << "+--------------------------------------------------------------------+" << endl;
-    cout << "¦  ID  ¦       NOMBRE COMPLETO    ¦    CÉDULA    ¦ EDAD ¦ CONSULTAS  ¦" << endl;
-    cout << "+------+--------------------------+--------------+------+------------¦" << endl;
+    cout << "Â¦  ID  Â¦       NOMBRE COMPLETO    Â¦    CÃ‰DULA    Â¦ EDAD Â¦ CONSULTAS  Â¦" << endl;
+    cout << "+------+--------------------------+--------------+------+------------Â¦" << endl;
 
     for (int i = 0; i < hospital -> cantidadPacientes; i++) {
         Paciente * p = & hospital -> pacientes[i];
@@ -500,7 +1025,7 @@ void listarPacientes(Hospital * hospital) {
             nombreCompleto[22] = '\0';
         }
 
-        printf("¦ %4d ¦ %-24s ¦ %-12s ¦ %4d ¦ %10d ¦\n",
+        printf("Â¦ %4d Â¦ %-24s Â¦ %-12s Â¦ %4d Â¦ %10d Â¦\n",
             p -> id, nombreCompleto, p -> cedula, p -> edad, p -> cantidadConsultas);
     }
 
@@ -525,7 +1050,7 @@ void agregarConsultaAlHistorial(Paciente * paciente, HistorialMedico consulta) {
         paciente -> historial = nuevoHistorial;
         paciente -> capacidadHistorial = nuevaCapacidad;
 
-        cout << "Historial médico redimensionado. Nueva capacidad: " << nuevaCapacidad << endl;
+        cout << "Historial mÃ©dico redimensionado. Nueva capacidad: " << nuevaCapacidad << endl;
     }
 
     paciente -> historial[paciente -> cantidadConsultas] = consulta;
@@ -546,24 +1071,24 @@ HistorialMedico * obtenerHistorialCompleto(Paciente * paciente, int * cantidad) 
 
 void mostrarHistorialMedico(Paciente * paciente) {
     if (!paciente) {
-        cout << "Error: Paciente no válido." << endl;
+        cout << "Error: Paciente no vÃ¡lido." << endl;
         return;
     }
 
     if (paciente -> cantidadConsultas == 0) {
-        cout << "El paciente no tiene consultas en su historial médico." << endl;
+        cout << "El paciente no tiene consultas en su historial mÃ©dico." << endl;
         return;
     }
 
-    cout << "\n=== HISTORIAL MÉDICO ===" << endl;
+    cout << "\n=== HISTORIAL MÃ‰DICO ===" << endl;
     cout << "Paciente: " << paciente -> nombre << " " << paciente -> apellido << endl;
-    cout << "Cédula: " << paciente -> cedula << " | Edad: " << paciente -> edad << endl;
+    cout << "CÃ©dula: " << paciente -> cedula << " | Edad: " << paciente -> edad << endl;
     cout << "Total de consultas: " << paciente -> cantidadConsultas << endl;
     cout << endl;
 
     cout << left << setw(12) << "FECHA" <<
         setw(8) << "HORA" <<
-        setw(25) << "DIAGNÓSTICO" <<
+        setw(25) << "DIAGNÃ“STICO" <<
         setw(8) << "DOCTOR" <<
         setw(10) << "COSTO" <<
         endl;
@@ -618,13 +1143,13 @@ Doctor * crearDoctor(Hospital * hospital,
                     float costoConsulta) {
 
     if (!hospital || !nombre || !apellido || !cedula || !especialidad) {
-        cout << "Error: Parámetros inválidos." << endl;
+        cout << "Error: ParÃ¡metros invÃ¡lidos." << endl;
         return nullptr;
     }
 
     for (int i = 0; i < hospital -> cantidadDoctores; i++) {
         if (strcmp(hospital -> doctores[i].cedula, cedula) == 0) {
-            cout << "Error: Ya existe un doctor con la misma cédula " << cedula << endl;
+            cout << "Error: Ya existe un doctor con la misma cÃ©dula " << cedula << endl;
             return nullptr;
         }
     }
@@ -784,19 +1309,19 @@ void mostrarDoctoresEspecialidad(Doctor ** doctores, int cantidad) {
 bool asignarpacienteadoctor(Hospital * hospital, int idDoctor, int idPaciente) {
     Doctor * doctor = buscarDoctorPorId(hospital, idDoctor);
     if (!doctor) {
-        cout << "Error: No se encontró doctor con ID " << idDoctor << endl;
+        cout << "Error: No se encontrÃ³ doctor con ID " << idDoctor << endl;
         return false;
     }
 
     Paciente * paciente = buscarPacientePorId(hospital, idPaciente);
     if (!paciente) {
-        cout << "Error: No se encontró paciente con ID " << idPaciente << endl;
+        cout << "Error: No se encontrÃ³ paciente con ID " << idPaciente << endl;
         return false;
     }
 
     for (int i = 0; i < doctor -> cantidadPacientes; i++) {
         if (doctor -> pacientesAsignados[i] == idPaciente) {
-            cout << "El paciente ya está asignado al doctor." << endl;
+            cout << "El paciente ya estÃ¡ asignado al doctor." << endl;
             return false;
         }
     }
@@ -824,7 +1349,7 @@ bool asignarpacienteadoctor(Hospital * hospital, int idDoctor, int idPaciente) {
 }
 bool removerPacienteDeDoctor(Doctor * doctor, int idPaciente) {
     if (!doctor) {
-        cout << "Error: Doctor no válido." << endl;
+        cout << "Error: Doctor no vÃ¡lido." << endl;
         return false;
     }
 
@@ -842,7 +1367,7 @@ bool removerPacienteDeDoctor(Doctor * doctor, int idPaciente) {
     }
 
     if (indice == -1) {
-        cout << "El paciente con ID " << idPaciente << " no está asignado a este doctor." << endl;
+        cout << "El paciente con ID " << idPaciente << " no estÃ¡ asignado a este doctor." << endl;
         return false;
     }
 
@@ -862,7 +1387,7 @@ bool removerPacienteDeDoctor(Doctor * doctor, int idPaciente) {
 void listarpacientesdedoctor(Hospital * hospital, int idDoctor) {
     Doctor * doctor = buscarDoctorPorId(hospital, idDoctor);
     if (!doctor) {
-        cout << "Error: No se encontró doctor con ID " << idDoctor << endl;
+        cout << "Error: No se encontrÃ³ doctor con ID " << idDoctor << endl;
         return;
     }
 
@@ -874,7 +1399,7 @@ void listarpacientesdedoctor(Hospital * hospital, int idDoctor) {
     cout << "\n=== PACIENTES ASIGNADOS AL DOCTOR " << doctor -> nombre << " " << doctor -> apellido << " ===" << endl;
     cout << left << setw(4) << "ID" <<
         setw(20) << "NOMBRE COMPLETO" <<
-        setw(12) << "CÉDULA" <<
+        setw(12) << "CÃ‰DULA" <<
         setw(5) << "EDAD" <<
         endl;
     cout << string(50, '-') << endl;
@@ -903,8 +1428,8 @@ void listardoctores(Hospital * hospital) {
 
     cout << "\nLISTA DE DOCTORES (" << hospital -> cantidadDoctores << "):" << endl;
     cout << "+-----------------------------------------------------------------------------+" << endl;
-    cout << "¦  ID  ¦       NOMBRE COMPLETO    ¦  ESPECIALIDAD ¦ aniosS EXPERIENCIA ¦  COSTO    ¦" << endl;
-    cout << "+------+--------------------------+--------------+---------------+------------¦" << endl;
+    cout << "Â¦  ID  Â¦       NOMBRE COMPLETO    Â¦  ESPECIALIDAD Â¦ aniosS EXPERIENCIA Â¦  COSTO    Â¦" << endl;
+    cout << "+------+--------------------------+--------------+---------------+------------Â¦" << endl;
 
     for (int i = 0; i < hospital -> cantidadDoctores; i++) {
         Doctor * d = & hospital -> doctores[i];
@@ -919,7 +1444,7 @@ void listardoctores(Hospital * hospital) {
             nombreCompleto[22] = '\0';
         }
 
-        printf("¦ %4d ¦ %-24s ¦ %-12s ¦     %4d     ¦ $%8.2f ¦\n",
+        printf("Â¦ %4d Â¦ %-24s Â¦ %-12s Â¦     %4d     Â¦ $%8.2f Â¦\n",
             d -> id, nombreCompleto, d -> especialidad, d -> aniosExperiencia, d -> costoConsulta);
     }
 
@@ -927,7 +1452,7 @@ void listardoctores(Hospital * hospital) {
 
 }
 bool eliminarDoctor(Hospital * hospital, int id) {
-    // Buscar el índice del doctor
+    // Buscar el Ã­ndice del doctor
     int indice = -1;
     for (int i = 0; i < hospital -> cantidadDoctores; i++) {
         if (hospital -> doctores[i].id == id) {
@@ -937,12 +1462,12 @@ bool eliminarDoctor(Hospital * hospital, int id) {
     }
 
     if (indice == -1) {
-        cout << "Error: No se encontró doctor con ID " << id << endl;
+        cout << "Error: No se encontrÃ³ doctor con ID " << id << endl;
         return false;
     }
 
     Doctor * doctor = & hospital -> doctores[indice];
-    // Liberar memoria de los arreglos dinámicos del doctor
+    // Liberar memoria de los arreglos dinÃ¡micos del doctor
     delete[] doctor -> pacientesAsignados;
     delete[] doctor -> citasAgendadas;
 
@@ -983,9 +1508,9 @@ Cita * agendarCita(Hospital * hospital, int idPaciente, int idDoctor,
         const char * hora,
             const char * motivo) {
 
-    // Validaciones básicas de parámetros
+    // Validaciones bÃ¡sicas de parÃ¡metros
     if (!hospital || !fecha || !hora || !motivo) {
-        cout << "Error: Parámetros inválidos." << endl;
+        cout << "Error: ParÃ¡metros invÃ¡lidos." << endl;
         return nullptr;
     }
 
@@ -1003,36 +1528,36 @@ Cita * agendarCita(Hospital * hospital, int idPaciente, int idDoctor,
         return nullptr;
     }
 
-    // Verificar que el doctor esté disponible
+    // Verificar que el doctor estÃ© disponible
     if (!doctor -> disponible) {
-        cout << "Error: El doctor no está disponible." << endl;
+        cout << "Error: El doctor no estÃ¡ disponible." << endl;
         return nullptr;
     }
 
     // Validar formato de fecha (YYYY-MM-DD)
     if (strlen(fecha) != 10 || fecha[4] != '-' || fecha[7] != '-') {
-        cout << "Error: Formato de fecha inválido. Use YYYY-MM-DD" << endl;
+        cout << "Error: Formato de fecha invÃ¡lido. Use YYYY-MM-DD" << endl;
         return nullptr;
     }
 
-    // Validar que los componentes de la fecha sean números
+    // Validar que los componentes de la fecha sean nÃºmeros
     for (int i = 0; i < 10; i++) {
         if (i != 4 && i != 7 && !isdigit(fecha[i])) {
-            cout << "Error: La fecha debe contener solo números y guiones." << endl;
+            cout << "Error: La fecha debe contener solo nÃºmeros y guiones." << endl;
             return nullptr;
         }
     }
 
     //  Validar formato de hora (HH:MM)
     if (strlen(hora) != 5 || hora[2] != ':') {
-        cout << "Error: Formato de hora inválido. Use HH:MM" << endl;
+        cout << "Error: Formato de hora invÃ¡lido. Use HH:MM" << endl;
         return nullptr;
     }
 
-    // Validar que los componentes de la hora sean números
+    // Validar que los componentes de la hora sean nÃºmeros
     for (int i = 0; i < 5; i++) {
         if (i != 2 && !isdigit(hora[i])) {
-            cout << "Error: La hora debe contener solo números y dos puntos." << endl;
+            cout << "Error: La hora debe contener solo nÃºmeros y dos puntos." << endl;
             return nullptr;
         }
     }
@@ -1067,7 +1592,7 @@ Cita * agendarCita(Hospital * hospital, int idPaciente, int idDoctor,
         }
     }
 
-    // Redimensionar arreglo de citas si está lleno
+    // Redimensionar arreglo de citas si estÃ¡ lleno
     if (hospital -> cantidadCitas >= hospital -> capacidadCitas) {
         int nuevaCapacidad = hospital -> capacidadCitas * 2;
         Cita * nuevasCitas = new Cita[nuevaCapacidad];
@@ -1082,7 +1607,7 @@ Cita * agendarCita(Hospital * hospital, int idPaciente, int idDoctor,
         cout << "Capacidad de citas aumentada a " << nuevaCapacidad << endl;
     }
 
-    // Obtener índice de la nueva cita
+    // Obtener Ã­ndice de la nueva cita
     int indice = hospital -> cantidadCitas;
 
     // Crear estructura Cita
@@ -1150,13 +1675,13 @@ bool cancelarCita(Hospital * hospital, int idCita) {
     }
 
     if (!cita) {
-        cout << "Error: No se encontró cita con ID " << idCita << endl;
+        cout << "Error: No se encontrÃ³ cita con ID " << idCita << endl;
         return false;
     }
 
-    // Verificar que la cita no esté ya cancelada o atendida
+    // Verificar que la cita no estÃ© ya cancelada o atendida
     if (strcmp(cita -> estado, "CANCELADA") == 0) {
-        cout << "La cita ya está cancelada." << endl;
+        cout << "La cita ya estÃ¡ cancelada." << endl;
         return false;
     }
 
@@ -1213,7 +1738,7 @@ bool atenderCita(Hospital * hospital, int idCita,
             const char * medicamentos) {
 
     if (!hospital || !diagnostico || !tratamiento || !medicamentos) {
-        cout << "Error: Parámetros inválidos." << endl;
+        cout << "Error: ParÃ¡metros invÃ¡lidos." << endl;
         return false;
     }
 
@@ -1227,13 +1752,13 @@ bool atenderCita(Hospital * hospital, int idCita,
     }
 
     if (!cita) {
-        cout << "Error: No se encontró cita con ID " << idCita << endl;
+        cout << "Error: No se encontrÃ³ cita con ID " << idCita << endl;
         return false;
     }
 
-    //Verificar que esté en estado "Agendada"
+    //Verificar que estÃ© en estado "Agendada"
     if (strcmp(cita -> estado, "AGENDADA") != 0) {
-        cout << "Error: La cita no está en estado 'Agendada'. Estado actual: " << cita -> estado << endl;
+        cout << "Error: La cita no estÃ¡ en estado 'Agendada'. Estado actual: " << cita -> estado << endl;
         return false;
     }
 
@@ -1247,12 +1772,12 @@ bool atenderCita(Hospital * hospital, int idCita,
     Doctor * doctor = buscarDoctorPorId(hospital, cita -> idDoctor);
 
     if (!paciente) {
-        cout << "Error: No se encontró el paciente asociado a la cita." << endl;
+        cout << "Error: No se encontrÃ³ el paciente asociado a la cita." << endl;
         return false;
     }
 
     if (!doctor) {
-        cout << "Error: No se encontró el doctor asociado a la cita." << endl;
+        cout << "Error: No se encontrÃ³ el doctor asociado a la cita." << endl;
         return false;
     }
 
@@ -1267,7 +1792,7 @@ bool atenderCita(Hospital * hospital, int idCita,
     strcpy(nuevaConsulta.fecha, cita -> fecha);
     strcpy(nuevaConsulta.hora, cita -> hora);
 
-    // Diagnóstico, tratamiento, medicamentos recibidos
+    // DiagnÃ³stico, tratamiento, medicamentos recibidos
     strcpy(nuevaConsulta.diagnostico, diagnostico);
     strcpy(nuevaConsulta.tratamiento, tratamiento);
     strcpy(nuevaConsulta.medicamentos, medicamentos);
@@ -1278,27 +1803,27 @@ bool atenderCita(Hospital * hospital, int idCita,
 
     agregarConsultaAlHistorial(paciente, nuevaConsulta);
 
-    // El contador de consultas se incrementa automáticamente en agregarConsultaAlHistorial
+    // El contador de consultas se incrementa automÃ¡ticamente en agregarConsultaAlHistorial
 
     // Actualizar observaciones de la cita
     char observaciones[200];
     snprintf(observaciones, sizeof(observaciones),
-        "Atendida - Diagnóstico: %s", diagnostico);
+        "Atendida - DiagnÃ³stico: %s", diagnostico);
     strcpy(cita -> observaciones, observaciones);
 
     cout << "Cita atendida exitosamente." << endl;
     cout << "ID Cita: " << cita -> id << endl;
     cout << "Paciente: " << paciente -> nombre << " " << paciente -> apellido << endl;
     cout << "Doctor: " << doctor -> nombre << " " << doctor -> apellido << endl;
-    cout << "Diagnóstico: " << diagnostico << endl;
+    cout << "DiagnÃ³stico: " << diagnostico << endl;
     cout << "Costo: $" << doctor -> costoConsulta << endl;
-    cout << "Consulta agregada al historial médico. ID Consulta: " << nuevaConsulta.idConsulta << endl;
+    cout << "Consulta agregada al historial mÃ©dico. ID Consulta: " << nuevaConsulta.idConsulta << endl;
 
     return true;
 }
 
 Cita ** obtenerCitasDePaciente(Hospital * hospital, int idPaciente, int * cantidad) {
-    // Validar parámetros
+    // Validar parÃ¡metros
     if (!hospital || !cantidad) {
         if (cantidad) * cantidad = 0;
         return nullptr;
@@ -1312,7 +1837,7 @@ Cita ** obtenerCitasDePaciente(Hospital * hospital, int idPaciente, int * cantid
         return nullptr;
     }
 
-    // Contar cuántas citas tiene el paciente
+    // Contar cuÃ¡ntas citas tiene el paciente
     * cantidad = 0;
     for (int i = 0; i < hospital -> cantidadCitas; i++) {
         if (hospital -> citas[i].idPaciente == idPaciente) {
@@ -1326,7 +1851,7 @@ Cita ** obtenerCitasDePaciente(Hospital * hospital, int idPaciente, int * cantid
         return nullptr;
     }
 
-    // Crear arreglo dinámico de punteros a Cita
+    // Crear arreglo dinÃ¡mico de punteros a Cita
     Cita ** resultados = new Cita * [ * cantidad];
 
     // Llenar el arreglo con punteros a las citas del paciente
@@ -1347,7 +1872,7 @@ void liberarResultadosCitas(Cita ** resultados) {
     }
 }
 Cita ** obtenerCitasDeDoctor(Hospital * hospital, int idDoctor, int * cantidad) {
-    // Validar parámetros
+    // Validar parÃ¡metros
     if (!hospital || !cantidad) {
         if (cantidad) * cantidad = 0;
         return nullptr;
@@ -1361,7 +1886,7 @@ Cita ** obtenerCitasDeDoctor(Hospital * hospital, int idDoctor, int * cantidad) 
         return nullptr;
     }
 
-    // Contar cuántas citas tiene el doctor
+    // Contar cuÃ¡ntas citas tiene el doctor
     * cantidad = 0;
     for (int i = 0; i < hospital -> cantidadCitas; i++) {
         if (hospital -> citas[i].idDoctor == idDoctor) {
@@ -1375,7 +1900,7 @@ Cita ** obtenerCitasDeDoctor(Hospital * hospital, int idDoctor, int * cantidad) 
         return nullptr;
     }
 
-    // Crear arreglo dinámico de punteros a Cita
+    // Crear arreglo dinÃ¡mico de punteros a Cita
     Cita ** resultados = new Cita * [ * cantidad];
 
     // Llenar el arreglo con punteros a las citas del doctor
@@ -1392,7 +1917,7 @@ Cita ** obtenerCitasDeDoctor(Hospital * hospital, int idDoctor, int * cantidad) 
 }
 Cita ** obtenerCitasPorFecha(Hospital * hospital,
     const char * fecha, int * cantidad) {
-    // Validar parámetros
+    // Validar parÃ¡metros
     if (!hospital || !fecha || !cantidad) {
         if (cantidad) * cantidad = 0;
         return nullptr;
@@ -1400,12 +1925,12 @@ Cita ** obtenerCitasPorFecha(Hospital * hospital,
 
     // Validar formato de fecha
     if (strlen(fecha) != 10 || fecha[4] != '-' || fecha[7] != '-') {
-        cout << "Error: Formato de fecha inválido. Use YYYY-MM-DD" << endl;
+        cout << "Error: Formato de fecha invÃ¡lido. Use YYYY-MM-DD" << endl;
         * cantidad = 0;
         return nullptr;
     }
 
-    // Contar cuántas citas hay para esa fecha
+    // Contar cuÃ¡ntas citas hay para esa fecha
     * cantidad = 0;
     for (int i = 0; i < hospital -> cantidadCitas; i++) {
         if (strcmp(hospital -> citas[i].fecha, fecha) == 0) {
@@ -1419,7 +1944,7 @@ Cita ** obtenerCitasPorFecha(Hospital * hospital,
         return nullptr;
     }
 
-    // Crear array dinámico de punteros a Cita
+    // Crear array dinÃ¡mico de punteros a Cita
     Cita ** resultados = new Cita * [ * cantidad];
 
     // Llenar el array con punteros a las citas de la fecha
@@ -1466,13 +1991,13 @@ void listarCitasPendientes(Hospital * hospital) {
             Doctor * d = buscarDoctorPorId(hospital, c -> idDoctor);
 
             cout << "+-- CITA #" << c -> id << " -----------------------------------------------------------+" << endl;
-            cout << "¦ Fecha: " << setw(12) << left << c -> fecha << " Hora: " << setw(8) << c -> hora;
-            cout << " Especialidad: " << setw(15) << (d ? d -> especialidad : "N/A") << " ¦" << endl;
-            cout << "¦ Paciente: " << setw(25) << (p ? string(p -> nombre) + " " + p -> apellido : "No encontrado");
-            cout << " Cédula: " << setw(12) << (p ? p -> cedula : "N/A") << " ¦" << endl;
-            cout << "¦ Doctor: " << setw(27) << (d ? "Dr. " + string(d -> nombre) + " " + d -> apellido : "No encontrado");
-            cout << " Costo: $" << setw(8) << fixed << setprecision(2) << (d ? d -> costoConsulta : 0) << " ¦" << endl;
-            cout << "¦ Motivo: " << setw(58) << c -> motivo << " ¦" << endl;
+            cout << "Â¦ Fecha: " << setw(12) << left << c -> fecha << " Hora: " << setw(8) << c -> hora;
+            cout << " Especialidad: " << setw(15) << (d ? d -> especialidad : "N/A") << " Â¦" << endl;
+            cout << "Â¦ Paciente: " << setw(25) << (p ? string(p -> nombre) + " " + p -> apellido : "No encontrado");
+            cout << " CÃ©dula: " << setw(12) << (p ? p -> cedula : "N/A") << " Â¦" << endl;
+            cout << "Â¦ Doctor: " << setw(27) << (d ? "Dr. " + string(d -> nombre) + " " + d -> apellido : "No encontrado");
+            cout << " Costo: $" << setw(8) << fixed << setprecision(2) << (d ? d -> costoConsulta : 0) << " Â¦" << endl;
+            cout << "Â¦ Motivo: " << setw(58) << c -> motivo << " Â¦" << endl;
             cout << "+------------------------------------------------------------------------------------+" << endl;
         }
     }
@@ -1483,9 +2008,9 @@ void listarCitasPendientes(Hospital * hospital) {
 bool verificarDisponibilidad(Hospital * hospital, int idDoctor,
     const char * fecha,
         const char * hora) {
-    // Validar parámetros
+    // Validar parÃ¡metros
     if (!hospital || !fecha || !hora) {
-        cout << "Error: Parámetros inválidos." << endl;
+        cout << "Error: ParÃ¡metros invÃ¡lidos." << endl;
         return false;
     }
 
@@ -1496,21 +2021,21 @@ bool verificarDisponibilidad(Hospital * hospital, int idDoctor,
         return false;
     }
 
-    // Verificar que el doctor esté disponible
+    // Verificar que el doctor estÃ© disponible
     if (!doctor -> disponible) {
-        cout << "El doctor no está disponible para consultas." << endl;
+        cout << "El doctor no estÃ¡ disponible para consultas." << endl;
         return false;
     }
 
     // Validar formato de fecha
     if (strlen(fecha) != 10 || fecha[4] != '-' || fecha[7] != '-') {
-        cout << "Error: Formato de fecha inválido." << endl;
+        cout << "Error: Formato de fecha invÃ¡lido." << endl;
         return false;
     }
 
     // Validar formato de hora
     if (strlen(hora) != 5 || hora[2] != ':') {
-        cout << "Error: Formato de hora inválido." << endl;
+        cout << "Error: Formato de hora invÃ¡lido." << endl;
         return false;
     }
 
@@ -1521,7 +2046,7 @@ bool verificarDisponibilidad(Hospital * hospital, int idDoctor,
             strcmp(hospital -> citas[i].hora, hora) == 0 &&
             strcmp(hospital -> citas[i].estado, "AGENDADA") == 0) {
 
-            // Encontrar información del paciente para el mensaje
+            // Encontrar informaciÃ³n del paciente para el mensaje
             Paciente * paciente = buscarPacientePorId(hospital, hospital -> citas[i].idPaciente);
             cout << "El doctor ya tiene una cita agendada para " << fecha << " a las " << hora << endl;
             if (paciente) {
@@ -1531,7 +2056,7 @@ bool verificarDisponibilidad(Hospital * hospital, int idDoctor,
         }
     }
 
-    // Si llegamos aquí, el doctor está disponible
+    // Si llegamos aquÃ­, el doctor estÃ¡ disponible
     cout << "Doctor disponible el " << fecha << " a las " << hora << endl;
     cout << "Doctor: " << doctor -> nombre << " " << doctor -> apellido << endl;
     cout << "Especialidad: " << doctor -> especialidad << endl;
@@ -1544,7 +2069,7 @@ Hospital * inicializarHospital(const char * nombre = "Hospital Central",
     int capacidadCitas = 20) {
 
     if (!nombre || capacidadPacientes <= 0 || capacidadDoctores <= 0 || capacidadCitas <= 0) {
-        cout << "Error: Parámetros inválidos para inicializar hospital." << endl;
+        cout << "Error: ParÃ¡metros invÃ¡lidos para inicializar hospital." << endl;
         return nullptr;
     }
 
@@ -1662,10 +2187,10 @@ bool validarFecha(const char * fecha) {
         return false;
     }
 
-    // Verificar que todos los caracteres excepto los guiones sean dígitos
+    // Verificar que todos los caracteres excepto los guiones sean dÃ­gitos
     for (int i = 0; i < 10; i++) {
         if (i != 4 && i != 7 && !isdigit(fecha[i])) {
-            cout << "Error: La fecha debe contener solo números y guiones" << endl;
+            cout << "Error: La fecha debe contener solo nÃºmeros y guiones" << endl;
             return false;
         }
     }
@@ -1682,11 +2207,11 @@ bool validarFecha(const char * fecha) {
 
     // Validar mes (1-12)
     if (mes < 1 || mes > 12) {
-        cout << "Error: Mes " << mes << " inválido. Use 1-12" << endl;
+        cout << "Error: Mes " << mes << " invÃ¡lido. Use 1-12" << endl;
         return false;
     }
 
-    // Validar día según el mes
+    // Validar dÃ­a segÃºn el mes
     int diasEnMes;
 
     switch (mes) {
@@ -1714,13 +2239,13 @@ bool validarFecha(const char * fecha) {
         }
         break;
     default:
-        diasEnMes = 0; // Nunca debería llegar aquí
+        diasEnMes = 0; // Nunca deberÃ­a llegar aquÃ­
     }
 
     if (dia < 1 || dia > diasEnMes) {
-        cout << "Error: Día " << dia << " inválido para " <<
+        cout << "Error: DÃ­a " << dia << " invÃ¡lido para " <<
             obtenerNombreMes(mes) << " " << anios <<
-            " (máximo " << diasEnMes << " días)" << endl;
+            " (mÃ¡ximo " << diasEnMes << " dÃ­as)" << endl;
         return false;
     }
 
@@ -1747,7 +2272,7 @@ const char * obtenerNombreMes(int mes) {
     if (mes >= 1 && mes <= 12) {
         return nombresMeses[mes - 1];
     }
-    return "Mes inválido";
+    return "Mes invÃ¡lido";
 }
 bool validarHora(const char * hora) {
 
@@ -1761,12 +2286,12 @@ bool validarHora(const char * hora) {
         return false;
     }
 
-    // Verificar que todos los caracteres numéricos sean dígitos
+    // Verificar que todos los caracteres numÃ©ricos sean dÃ­gitos
     if (!isdigit(hora[0]) || !isdigit(hora[1]) || !isdigit(hora[3]) || !isdigit(hora[4])) {
         return false;
     }
 
-    // Convertir horas y minutos a números
+    // Convertir horas y minutos a nÃºmeros
     int horas = (hora[0] - '0') * 10 + (hora[1] - '0');
     int minutos = (hora[3] - '0') * 10 + (hora[4] - '0');
 
@@ -1784,7 +2309,7 @@ bool validarHora(const char * hora) {
 int compararFechas(const char * fecha1,
     const char * fecha2) {
     // Asumimos formato DD/MM/AAAA (10 caracteres)
-    // Extraer día, mes y anios de ambas fechas
+    // Extraer dÃ­a, mes y anios de ambas fechas
 
     // Fecha 1
     int dia1 = (fecha1[0] - '0') * 10 + (fecha1[1] - '0');
@@ -1806,7 +2331,7 @@ int compararFechas(const char * fecha1,
     if (mes1 < mes2) return -1;
     if (mes1 > mes2) return 1;
 
-    // Si meses iguales, comparar por día
+    // Si meses iguales, comparar por dÃ­a
     if (dia1 < dia2) return -1;
     if (dia1 > dia2) return 1;
 
@@ -1815,19 +2340,19 @@ int compararFechas(const char * fecha1,
 }
 
 bool validarEmail(const char * email) {
-    if (email == nullptr || strlen(email) < 5) { // mínimo: a@b.c
+    if (email == nullptr || strlen(email) < 5) { // mÃ­nimo: a@b.c
         return false;
     }
 
     const char * arroba = strchr(email, '@');
     if (arroba == nullptr || arroba == email) {
-        return false; // No hay @ o está al inicio
+        return false; // No hay @ o estÃ¡ al inicio
     }
 
-    // Buscar punto después del @
+    // Buscar punto despuÃ©s del @
     const char * punto = strchr(arroba + 1, '.');
     if (punto == nullptr || punto == arroba + 1 || * (punto + 1) == '\0') {
-        return false; // No hay punto, o está justo después del @, o no hay nada después
+        return false; // No hay punto, o estÃ¡ justo despuÃ©s del @, o no hay nada despuÃ©s
     }
 
     return (strchr(email, ' ') == nullptr);
@@ -1858,7 +2383,7 @@ Paciente * copiarPaciente(Paciente * original) {
     // Crear nuevo paciente en el heap
     Paciente * copia = new Paciente;
 
-    // Copiar datos primitivos y arreglos estáticos
+    // Copiar datos primitivos y arreglos estÃ¡ticos
     copia -> id = original -> id;
     copia -> edad = original -> edad;
     copia -> sexo = original -> sexo;
@@ -1868,7 +2393,7 @@ Paciente * copiarPaciente(Paciente * original) {
     copia -> capacidadCitas = original -> capacidadCitas;
     copia -> activo = original -> activo;
 
-    // Copiar arreglos estáticos
+    // Copiar arreglos estÃ¡ticos
     strcpy(copia -> nombre, original -> nombre);
     strcpy(copia -> apellido, original -> apellido);
     strcpy(copia -> cedula, original -> cedula);
@@ -1879,7 +2404,7 @@ Paciente * copiarPaciente(Paciente * original) {
     strcpy(copia -> alergias, original -> alergias);
     strcpy(copia -> observaciones, original -> observaciones);
 
-    // DEEP COPY: Copiar arreglo dinámico de historial médico
+    // DEEP COPY: Copiar arreglo dinÃ¡mico de historial mÃ©dico
     if (original -> cantidadConsultas > 0 && original -> historial != nullptr) {
         copia -> historial = new HistorialMedico[original -> capacidadHistorial];
 
@@ -1892,7 +2417,7 @@ Paciente * copiarPaciente(Paciente * original) {
         copia -> historial = nullptr;
     }
 
-    // DEEP COPY: Copiar arreglo dinámico de IDs de citas
+    // DEEP COPY: Copiar arreglo dinÃ¡mico de IDs de citas
     if (original -> cantidadCitas > 0 && original -> citasAgendadas != nullptr) {
         copia -> citasAgendadas = new int[original -> capacidadCitas];
 
@@ -1906,21 +2431,21 @@ Paciente * copiarPaciente(Paciente * original) {
     return copia;
 }
 
-// FUNCIÓN PRINCIPAL
+// FUNCIÃ“N PRINCIPAL
 void mostrarMenuPrincipal() {
     ;
     cout << "\n-----------------------------------------------" << endl;
     cout << "            HOSPITAL EL CALLAO" << endl;
-    cout << "              MENÚ PRINCIPAL" << endl;
+    cout << "              MENÃš PRINCIPAL" << endl;
     cout << "-----------------------------------------------" << endl;
-    cout << "1.  Gestión de Pacientes" << endl;
-    cout << "2.  Gestión de Doctores" << endl;
-    cout << "3.  Gestión de Citas" << endl;
+    cout << "1.  GestiÃ³n de Pacientes" << endl;
+    cout << "2.  GestiÃ³n de Doctores" << endl;
+    cout << "3.  GestiÃ³n de Citas" << endl;
     cout << "0.  Salir" << endl;
     cout << "-----------------------------------------------" << endl;
 }
 
-// FUNCIÓN PARA LEER OPCIONES CON VALIDACIÓN
+// FUNCIÃ“N PARA LEER OPCIONES CON VALIDACIÃ“N
 int leerOpcion(const char * mensaje, int min, int max) {
     int opcion;
     while (true) {
@@ -1930,7 +2455,7 @@ int leerOpcion(const char * mensaje, int min, int max) {
         if (cin.fail()) {
             cin.clear();
             limpiarBuffer();
-            cout << "Error: Por favor ingrese un número válido." << endl;
+            cout << "Error: Por favor ingrese un nÃºmero vÃ¡lido." << endl;
             continue;
         }
 
@@ -1939,7 +2464,7 @@ int leerOpcion(const char * mensaje, int min, int max) {
         if (opcion >= min && opcion <= max) {
             return opcion;
         } else {
-            cout << "Error: Opción fuera de rango. Use [" << min << "-" << max << "]" << endl;
+            cout << "Error: OpciÃ³n fuera de rango. Use [" << min << "-" << max << "]" << endl;
         }
     }
 }
@@ -1960,19 +2485,19 @@ void menuGestionPacientes(Hospital * hospital) {
         system("cls");
         system("cls");
         cout << "\n-----------------------------------------------" << endl;
-        cout << "           GESTIÓN DE PACIENTES" << endl;
+        cout << "           GESTIÃ“N DE PACIENTES" << endl;
         cout << "-----------------------------------------------" << endl;
         cout << "1.  Registrar nuevo paciente" << endl;
-        cout << "2.  Buscar paciente por cédula" << endl;
+        cout << "2.  Buscar paciente por cÃ©dula" << endl;
         cout << "3.  Buscar paciente por nombre" << endl;
-        cout << "4.  Ver historial médico completo" << endl;
+        cout << "4.  Ver historial mÃ©dico completo" << endl;
         cout << "5.  Actualizar datos del paciente" << endl;
         cout << "6.  Listar todos los pacientes" << endl;
         cout << "7.  Eliminar paciente" << endl;
-        cout << "0.  Volver al menú principal" << endl;
+        cout << "0.  Volver al menÃº principal" << endl;
         cout << "-----------------------------------------------" << endl;
 
-        opcion = leerOpcion("Seleccione una opción", 0, 7);
+        opcion = leerOpcion("Seleccione una opciÃ³n", 0, 7);
 
         switch (opcion) {
         case 1: {
@@ -1985,7 +2510,7 @@ void menuGestionPacientes(Hospital * hospital) {
             cin.getline(nombre, sizeof(nombre));
             cout << "Apellido: ";
             cin.getline(apellido, sizeof(apellido));
-            cout << "Cédula: ";
+            cout << "CÃ©dula: ";
             cin.getline(cedula, sizeof(cedula));
             cout << "Edad: ";
             cin >> edad;
@@ -2002,9 +2527,9 @@ void menuGestionPacientes(Hospital * hospital) {
         }
 
         case 2: {
-            cout << "\n--- BUSCAR PACIENTE POR CÉDULA ---" << endl;
+            cout << "\n--- BUSCAR PACIENTE POR CÃ‰DULA ---" << endl;
             char cedula[20];
-            cout << "Ingrese cédula: ";
+            cout << "Ingrese cÃ©dula: ";
             cin.getline(cedula, sizeof(cedula));
 
             Paciente * paciente = buscarPacientePorCedula(hospital, cedula);
@@ -2013,9 +2538,9 @@ void menuGestionPacientes(Hospital * hospital) {
                 cout << "ID: " << paciente -> id << endl;
                 cout << "Nombre: " << paciente -> nombre << " " << paciente -> apellido << endl;
                 cout << "Edad: " << paciente -> edad << endl;
-                cout << "Cédula: " << paciente -> cedula << endl;
+                cout << "CÃ©dula: " << paciente -> cedula << endl;
             } else {
-                cout << " No se encontró paciente con esa cédula." << endl;
+                cout << " No se encontrÃ³ paciente con esa cÃ©dula." << endl;
             }
             break;
         }
@@ -2032,7 +2557,7 @@ void menuGestionPacientes(Hospital * hospital) {
                 cout << "?? Encontrados " << cantidad << " pacientes:" << endl;
                 for (int i = 0; i < cantidad; i++) {
                     cout << (i + 1) << ". " << resultados[i] -> nombre << " " <<
-                        resultados[i] -> apellido << " (Cédula: " <<
+                        resultados[i] -> apellido << " (CÃ©dula: " <<
                         resultados[i] -> cedula << ")" << endl;
                 }
                 liberarResultadosBusqueda(resultados);
@@ -2043,7 +2568,7 @@ void menuGestionPacientes(Hospital * hospital) {
         }
 
         case 4: {
-            cout << "\n--- VER HISTORIAL MÉDICO ---" << endl;
+            cout << "\n--- VER HISTORIAL MÃ‰DICO ---" << endl;
             int idPaciente;
             cout << "Ingrese ID del paciente: ";
             cin >> idPaciente;
@@ -2053,7 +2578,7 @@ void menuGestionPacientes(Hospital * hospital) {
             if (paciente) {
                 mostrarHistorialMedico(paciente);
             } else {
-                cout << " No se encontró paciente con ese ID." << endl;
+                cout << " No se encontrÃ³ paciente con ese ID." << endl;
             }
             break;
         }
@@ -2087,23 +2612,23 @@ void menuGestionPacientes(Hospital * hospital) {
             cin >> idPaciente;
             limpiarBuffer();
 
-            // Buscar y mostrar información del paciente
+            // Buscar y mostrar informaciÃ³n del paciente
             Paciente * paciente = buscarPacientePorId(hospital, idPaciente);
             if (!paciente) {
-                cout << " No se encontró paciente con ID " << idPaciente << endl;
+                cout << " No se encontrÃ³ paciente con ID " << idPaciente << endl;
                 break;
             }
 
             cout << "\nPaciente a eliminar: " << paciente -> nombre << " " << paciente -> apellido << endl;
 
             char confirmacion;
-            cout << "¿Está seguro de eliminar este paciente? (s/n): ";
+            cout << "Â¿EstÃ¡ seguro de eliminar este paciente? (s/n): ";
             cin >> confirmacion;
             limpiarBuffer();
 
             if (tolower(confirmacion) == 's') {
 
-                cout << "LOS DATOS SE PERDERÁN PERMANENTEMENTE. ¿Continuar? (s/n): ";
+                cout << "LOS DATOS SE PERDERÃN PERMANENTEMENTE. Â¿Continuar? (s/n): ";
                 cin >> confirmacion;
                 limpiarBuffer();
 
@@ -2115,16 +2640,16 @@ void menuGestionPacientes(Hospital * hospital) {
                         cout << " No se pudo eliminar el paciente." << endl;
                     }
                 } else {
-                    cout << " Eliminación cancelada." << endl;
+                    cout << " EliminaciÃ³n cancelada." << endl;
                 }
             } else {
-                cout << " Eliminación cancelada." << endl;
+                cout << " EliminaciÃ³n cancelada." << endl;
             }
             break;
         }
 
         case 0:
-            cout << "Volviendo al menú principal..." << endl;
+            cout << "Volviendo al menÃº principal..." << endl;
             break;
         }
 
@@ -2135,13 +2660,13 @@ void menuGestionPacientes(Hospital * hospital) {
     } while (opcion != 0);
 }
 
-// MENÚ DE GESTIÓN DE DOCTORES
+// MENÃš DE GESTIÃ“N DE DOCTORES
 void menuGestionDoctores(Hospital * hospital) {
     int opcion;
 
     do {
         cout << "\n-----------------------------------------------" << endl;
-        cout << "           GESTIÓN DE DOCTORES" << endl;
+        cout << "           GESTIÃ“N DE DOCTORES" << endl;
         cout << "-----------------------------------------------" << endl;
         cout << "1.  Registrar nuevo doctor" << endl;
         cout << "2.  Buscar doctor por ID" << endl;
@@ -2150,10 +2675,10 @@ void menuGestionDoctores(Hospital * hospital) {
         cout << "5.  Ver pacientes asignados a doctor" << endl;
         cout << "6.  Listar todos los doctores" << endl;
         cout << "7.  Eliminar doctor" << endl;
-        cout << "0.  Volver al menú principal" << endl;
+        cout << "0.  Volver al menÃº principal" << endl;
         cout << "-----------------------------------------------" << endl;
 
-        opcion = leerOpcion("Seleccione una opción", 0, 7);
+        opcion = leerOpcion("Seleccione una opciÃ³n", 0, 7);
 
         switch (opcion) {
         case 1: {
@@ -2166,7 +2691,7 @@ void menuGestionDoctores(Hospital * hospital) {
             cin.getline(nombre, sizeof(nombre));
             cout << "Apellido: ";
             cin.getline(apellido, sizeof(apellido));
-            cout << "Cédula: ";
+            cout << "CÃ©dula: ";
             cin.getline(cedula, sizeof(cedula));
             cout << "Especialidad: ";
             cin.getline(especialidad, sizeof(especialidad));
@@ -2201,7 +2726,7 @@ void menuGestionDoctores(Hospital * hospital) {
                 cout << "Costo consulta: $" << doctor -> costoConsulta << endl;
                 cout << "Estado: " << (doctor -> disponible ? " Disponible" : " No disponible") << endl;
             } else {
-                cout << " No se encontró doctor con ese ID." << endl;
+                cout << " No se encontrÃ³ doctor con ese ID." << endl;
             }
             break;
         }
@@ -2245,11 +2770,11 @@ void menuGestionDoctores(Hospital * hospital) {
             Paciente * paciente = buscarPacientePorId(hospital, idPaciente);
 
             if (!doctor) {
-                cout << " No se encontró doctor con ID " << idDoctor << endl;
+                cout << " No se encontrÃ³ doctor con ID " << idDoctor << endl;
                 break;
             }
             if (!paciente) {
-                cout << " No se encontró paciente con ID " << idPaciente << endl;
+                cout << " No se encontrÃ³ paciente con ID " << idPaciente << endl;
                 break;
             }
 
@@ -2273,7 +2798,7 @@ void menuGestionDoctores(Hospital * hospital) {
 
             Doctor * doctor = buscarDoctorPorId(hospital, idDoctor);
             if (!doctor) {
-                cout << " No se encontró doctor con ID " << idDoctor << endl;
+                cout << " No se encontrÃ³ doctor con ID " << idDoctor << endl;
                 break;
             }
 
@@ -2287,7 +2812,7 @@ void menuGestionDoctores(Hospital * hospital) {
 
             cout << "\n" << left << setw(8) << "ID" <<
                 setw(25) << "NOMBRE COMPLETO" <<
-                setw(15) << "CÉDULA" <<
+                setw(15) << "CÃ‰DULA" <<
                 setw(6) << "EDAD" << endl;
             cout << string(60, '-') << endl;
 
@@ -2339,29 +2864,29 @@ void menuGestionDoctores(Hospital * hospital) {
             cin >> idDoctor;
             limpiarBuffer();
 
-            // Buscar doctor primero para mostrar información
+            // Buscar doctor primero para mostrar informaciÃ³n
             Doctor * doctor = buscarDoctorPorId(hospital, idDoctor);
             if (!doctor) {
-                cout << " No se encontró doctor con ID " << idDoctor << endl;
+                cout << " No se encontrÃ³ doctor con ID " << idDoctor << endl;
                 break;
             }
 
-            // Mostrar información del doctor
-            cout << "\n  INFORMACIÓN DEL DOCTOR A ELIMINAR:" << endl;
+            // Mostrar informaciÃ³n del doctor
+            cout << "\n  INFORMACIÃ“N DEL DOCTOR A ELIMINAR:" << endl;
             cout << "ID: " << doctor -> id << endl;
             cout << "Nombre: " << doctor -> nombre << " " << doctor -> apellido << endl;
             cout << "Especialidad: " << doctor -> especialidad << endl;
             cout << "Pacientes asignados: " << doctor -> cantidadPacientes << endl;
             cout << "Citas agendadas: " << doctor -> cantidadCitas << endl;
 
-            // Doble confirmación
+            // Doble confirmaciÃ³n
             char confirmacion;
-            cout << "¿Está seguro de eliminar este doctor? (s/n): ";
+            cout << "Â¿EstÃ¡ seguro de eliminar este doctor? (s/n): ";
             cin >> confirmacion;
             limpiarBuffer();
 
             if (tolower(confirmacion) == 's') {
-                cout << " LOS DATOS SE PERDERÁN PERMANENTEMENTE. ¿Continuar? (s/n): ";
+                cout << " LOS DATOS SE PERDERÃN PERMANENTEMENTE. Â¿Continuar? (s/n): ";
                 cin >> confirmacion;
                 limpiarBuffer();
 
@@ -2373,16 +2898,16 @@ void menuGestionDoctores(Hospital * hospital) {
                         cout << " No se pudo eliminar el doctor." << endl;
                     }
                 } else {
-                    cout << " Eliminación cancelada." << endl;
+                    cout << " EliminaciÃ³n cancelada." << endl;
                 }
             } else {
-                cout << " Eliminación cancelada." << endl;
+                cout << " EliminaciÃ³n cancelada." << endl;
             }
             break;
         }
 
         case 0:
-            cout << "Volviendo al menú principal..." << endl;
+            cout << "Volviendo al menÃº principal..." << endl;
             break;
         }
 
@@ -2393,7 +2918,7 @@ void menuGestionDoctores(Hospital * hospital) {
     } while (opcion != 0);
 }
 
-// MENÚ DE GESTIÓN DE CITAS
+// MENÃš DE GESTIÃ“N DE CITAS
 void menuGestionCitas(Hospital * hospital) {
     int opcion;
 
@@ -2615,7 +3140,7 @@ using namespace std;
 int main() {
     setlocale(LC_ALL, "es_ES.UTF-8");
 
-    cout << "SISTEMA DE GESTIÓN HOSPITALARIA" << endl;
+    cout << "SISTEMA DE GESTIÃ“N HOSPITALARIA" << endl;
     cout << "===================================" << endl;
 
     Hospital * hospital = inicializarHospital("Hospital el callao", 10, 5, 20);
@@ -2629,7 +3154,7 @@ int main() {
     do {
         system("cls");
         mostrarMenuPrincipal();
-        opcion = leerOpcion("Seleccione una opción", 0, 4);
+        opcion = leerOpcion("Seleccione una opciÃ³n", 0, 4);
 
         switch (opcion) {
         case 1:
@@ -2645,7 +3170,7 @@ int main() {
             cout << "Saliendo del programa..." << endl;
             break;
         default:
-            cout << "Opción no válida, ingrese una opción válida." << endl;
+            cout << "OpciÃ³n no vÃ¡lida, ingrese una opciÃ³n vÃ¡lida." << endl;
         }
 
     } while (opcion != 0);
