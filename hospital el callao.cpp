@@ -9,6 +9,8 @@
 #include <locale>
 #include <thread>
 #include <fstream>
+#include <string>
+#include <windows.h>
 
 
 struct Paciente;
@@ -2182,7 +2184,7 @@ bool crearDoctor(const char* nombre, const char* apellido, const char* cedula,
     }
 
     if (!cedula || strlen(cedula) == 0) {
-        cout << "Error: Cedula profesional es obligatoria" << endl;
+        cout << "Error: Cedula es obligatoria" << endl;
         return false;
     }
 
@@ -3963,21 +3965,61 @@ char* copiarString(const char* origen) {
   return destino;
 }
 
-// FUNCIoN PRINCIPAL
-void mostrarMenuPrincipal() {
-    cout << "\n===============================================" << endl;
-    cout << "       HOSPITAL EL CALLAO V2 " << endl;
-    cout << "===============================================" << endl;
-    cout << "1.  Gestion de Pacientes" << endl;
-    cout << "2.  Gestion de Doctores" << endl;
-    cout << "3.  Gestion de Citas" << endl;
-    cout << "4.  Historial Medico" << endl;
-    cout << "5.  Reportes y Estadisticas" << endl;
-    cout << "6.  Mantenimiento del Sistema" << endl;
-    cout << "0.  Salir" << endl;
-    cout << "===============================================" << endl;
+void setColor(int color) {
+    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), color);
 }
 
+// Función para centrar texto en la consola
+void centrarTexto(const string& texto) {
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    int anchoConsola;
+    
+    // Obtener el ancho de la consola
+    GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+    anchoConsola = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+    
+    // Calcular espacios para centrar
+    int espacios = (anchoConsola - texto.length()) / 2;
+    
+    // Imprimir espacios y texto
+    cout << string(espacios, ' ') << texto << endl;
+}
+
+void mostrarMenuPrincipal() {
+    system("cls"); // Limpiar pantalla (Windows)
+    
+    // Color codes: 0=Negro, 4=Rojo, 7=Gris claro (default), 15=Blanco
+    const int COLOR_ROJO = 4;
+    const int COLOR_NORMAL = 7;
+    const int COLOR_BLANCO = 15;
+    
+    cout << "\n\n\n"; // Espacios verticales para centrar verticalmente
+    
+    // Línea superior
+    centrarTexto("===============================================");
+    
+    // Logo en rojo
+    setColor(COLOR_ROJO);
+    centrarTexto("       HOSPITAL EL CALLAO V2");
+    setColor(COLOR_NORMAL);
+    
+    // Línea inferior del encabezado
+    centrarTexto("===============================================");
+    
+    // Opciones del menú
+    centrarTexto("1.  Gestion de Pacientes");
+    centrarTexto("2.  Gestion de Doctores");
+    centrarTexto("3.  Gestion de Citas");
+    centrarTexto("4.  Historial Medico");
+    centrarTexto("5.  Reportes y Estadisticas");
+    centrarTexto("6.  Mantenimiento del Sistema");
+    centrarTexto("0.  Salir");
+    
+    // Línea final
+    centrarTexto("===============================================");
+    
+    cout << "\n\n"; // Espacios al final
+}
 // FUNCIÃ“N PARA LEER OPCIONES CON VALIDACIÃ“N
 int leerOpcion(const char* mensaje, int min, int max) {
   int opcion;
@@ -4252,7 +4294,7 @@ void menuGestionDoctores() {
                 cin.getline(nombre, sizeof(nombre));
                 cout << "Apellido: ";
                 cin.getline(apellido, sizeof(apellido));
-                cout << "Cedula profesional: ";
+                cout << "Cedula: ";
                 cin.getline(cedula, sizeof(cedula));
                 cout << "Especialidad: ";
                 cin.getline(especialidad, sizeof(especialidad));
