@@ -7,6 +7,7 @@
 class Validaciones {
 public:
     // Validaciones esenciales
+    static bool validarArchivo(const char* nombreArchivo);
     static bool validarFecha(const char* fecha);  // YYYY-MM-DD
     static bool validarHora(const char* hora);    // HH:MM
     static bool validarEmail(const char* email);
@@ -32,5 +33,6 @@ public:
     static std::string leerTexto(const std::string& mensaje, int maxLongitud);
     static bool leerConfirmacion(const std::string& mensaje);
 };
+
 
 #endif
