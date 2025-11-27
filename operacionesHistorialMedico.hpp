@@ -6,6 +6,8 @@
 class OperacionesHistorial {
 public:
     // Operaciones CRUD
+    
+    bool agregarConsultaAlHistorial(int pacienteID, HistorialMedico nuevaConsulta);
     static bool agregarConsulta(HistorialMedico& consulta);
     static bool actualizarConsulta(const HistorialMedico& consulta);
     static bool eliminarConsulta(int id);
