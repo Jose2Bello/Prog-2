@@ -9,6 +9,9 @@
 using namespace std;
 
 // ==================== VALIDACIONES ====================
+bool validaciones::verificarArchivo(const char* nombreArchivo){
+    
+}
 
 bool Validaciones::validarFecha(const char* fecha) {
     if (!fecha || strlen(fecha) != 10) return false;
@@ -157,4 +160,5 @@ bool EntradaUsuario::leerConfirmacion(const std::string& mensaje) {
             cout << "Error: Por favor ingrese 's' o 'n'." << endl;
         }
     }
+
 }
