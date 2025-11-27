@@ -3,6 +3,7 @@
 
 #include <string>
 #include <ctime>
+#include <cstring>
 
 class Paciente {
 private:
@@ -91,5 +92,6 @@ public:
     static bool validarSexo(char sexo);
     static bool validarEdad(int edad);
 };
+
 
 #endif
