@@ -1,7 +1,7 @@
-#include "operacionesHistorial.hpp"
-#include "../persistencia/GestorArchivos.hpp"
-#include "../pacientes/operacionesPacientes.hpp"
-#include "../doctores/operacionesDoctores.hpp"
+#include "../include/operacionesHistorial.hpp"
+#include "../include/GestorArchivos.hpp"
+#include "../include/operacionesPacientes.hpp"
+#include "../include/operacionesDoctores.hpp"
 #include <iostream>
 #include <fstream>
 #include <cstring>
@@ -9,7 +9,6 @@
 
 using namespace std;
 
-// 🔥 NUEVO: Función helper para formatear fecha - similar a la que tenías en el código original
 const char* formatearFecha(time_t tiempo) {
     static char buffer[20];  // static para que persista después de retornar
     strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M", localtime(&tiempo));
@@ -456,7 +455,7 @@ void OperacionesHistorial::listarConsultasPorDoctor(int idDoctor) {
                 strcpy(nombrePaciente, "No encontrado");
             }
 
-            // Truncar diagnóstico
+
             char diagMostrar[22];
             strncpy(diagMostrar, consulta.getDiagnostico(), sizeof(diagMostrar) - 1);
             diagMostrar[sizeof(diagMostrar) - 1] = '\0';

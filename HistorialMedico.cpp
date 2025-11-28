@@ -1,4 +1,4 @@
-#include "HistorialMedico.hpp"
+#include "../include/HistorialMedico.hpp"
 #include <iostream>
 #include <iomanip>
 #include <ctime>

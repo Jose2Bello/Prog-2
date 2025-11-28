@@ -1,4 +1,4 @@
-#include "Citas.hpp"
+#include "../include/Citas.hpp"
 #include <iostream>
 #include <cstring>
 #include <iomanip>

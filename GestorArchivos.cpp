@@ -1,10 +1,70 @@
-#include "GestorArchivos.hpp"
+#include "../include/GestorArchivos.hpp"
 #include <iostream>
 #include <fstream>
 #include <cstring>
-#include <sys/stat.h>  // Para crear directorios en diferentes sistemas
+#include <sys/stat.h> 
+#include "../include/hospital.hpp"
+#include "../include/Doctor.hpp"
+#include "../include/Citas.hpp"
+#include "../include/Pacientes.hpp"
 
 using namespace std;
+
+bool GestorArchivos::verificarIntegridad(const char* nombreArchivo) {
+    cout << "\n=== VERIFICANDO INTEGRIDAD: " << nombreArchivo << " ===" << endl;
+    
+    if (!archivoExiste(nombreArchivo)) {
+        cout << " Archivo no existe: " << nombreArchivo << endl;
+        return false;
+    }
+    
+    // Verificar header
+    ArchivoHeader header = leerHeader(nombreArchivo, false);
+    if (!validarHeader(header)) {
+        cout << " Header corrupto" << endl;
+        return false;
+    }
+    cout << " Header válido" << endl;
+    
+    // Verificar tamaño del archivo
+    ifstream archivo(nombreArchivo, ios::binary | ios::ate);
+    streampos tamanio = archivo.tellg();
+    archivo.close();
+    
+    // Calcular tamaño esperado basado en el tipo de archivo
+    streampos tamanioEsperado = sizeof(ArchivoHeader);
+    const char* tipo = determinarTipoArchivo(nombreArchivo);
+    
+    if (strcmp(tipo, "PACIENTES") == 0) {
+        tamanioEsperado += header.cantidadRegistros * sizeof(Paciente);
+    } else if (strcmp(tipo, "DOCTORES") == 0) {
+        tamanioEsperado += header.cantidadRegistros * sizeof(Doctor);
+    } else if (strcmp(tipo, "CITAS") == 0) {
+        tamanioEsperado += header.cantidadRegistros * sizeof(Cita);
+    } else if (strcmp(tipo, "HOSPITAL") == 0) {
+        tamanioEsperado += sizeof(Hospital);
+    }
+    
+    if (tamanio != tamanioEsperado) {
+        cout << "    Tamaño del archivo incorrecto" << endl;
+        cout << "   Esperado: " << tamanioEsperado << " bytes" << endl;
+        cout << "   Encontrado: " << tamanio << " bytes" << endl;
+        return false;
+    }
+    cout << " Tamaño del archivo correcto: " << tamanio << " bytes" << endl;
+    
+    // Verificar consistencia de contadores
+    if (header.registrosActivos > header.cantidadRegistros) {
+        cout << "   Inconsistencia en contadores" << endl;
+        cout << "   Registros activos: " << header.registrosActivos << endl;
+        cout << "   Total registros: " << header.cantidadRegistros << endl;
+        return false;
+    }
+    cout << " Contadores consistentes" << endl;
+    
+    cout << " Archivo verificado correctamente" << endl;
+    return true;
+}
 
 bool GestorArchivos::archivoExiste(const char* nombreArchivo) {
     ifstream archivo(nombreArchivo, ios::binary);
@@ -14,6 +74,278 @@ bool GestorArchivos::archivoExiste(const char* nombreArchivo) {
     }
     return existe;
 }
+
+bool GestorArchivos::restaurarRespaldo(const char* nombreRespaldo, const char* nombreDestino) {
+    cout << "\n=== RESTAURANDO RESPALDO ===" << endl;
+    cout << "Desde: " << nombreRespaldo << endl;
+    cout << "Hacia: " << nombreDestino << endl;
+    
+    if (!archivoExiste(nombreRespaldo)) {
+        cout << " Archivo de respaldo no existe: " << nombreRespaldo << endl;
+        return false;
+    }
+    
+    // Verificar que el respaldo sea válido
+    if (!verificarArchivo(nombreRespaldo)) {
+        cout << " El archivo de respaldo está corrupto" << endl;
+        return false;
+    }
+    
+    // Crear respaldo del archivo actual si existe
+    if (archivoExiste(nombreDestino)) {
+        char respaldoActual[250];
+        sprintf(respaldoActual, "%s.pre_restauracion", nombreDestino);
+        if (copiarArchivo(nombreDestino, respaldoActual)) {
+            cout << " Respaldo del archivo actual creado: " << respaldoActual << endl;
+        }
+    }
+    
+    // Restaurar el respaldo
+    if (copiarArchivo(nombreRespaldo, nombreDestino)) {
+        cout << " Respaldo restaurado exitosamente" << endl;
+        
+        // Actualizar fecha de modificación en el header
+        ArchivoHeader header = leerHeader(nombreDestino, false);
+        header.fechaUltimaModificacion = time(nullptr);
+        actualizarHeader(nombreDestino, header);
+        
+        return true;
+    }
+    
+    cout << " Error al restaurar respaldo" << endl;
+    return false;
+}
+
+
+bool GestorArchivos::copiarArchivo(const char* origen, const char* destino) {
+    ifstream src(origen, ios::binary);
+    ofstream dst(destino, ios::binary);
+    
+    if (!src.is_open() || !dst.is_open()) {
+        return false;
+    }
+    
+    dst << src.rdbuf();
+    return src.good() && dst.good();
+}
+
+bool GestorArchivos::limpiarRegistrosEliminados(const char* nombreArchivo) {
+    cout << "\n=== LIMPIANDO REGISTROS ELIMINADOS: " << nombreArchivo << " ===" << endl;
+    
+    if (!archivoExiste(nombreArchivo)) {
+        cout << " Archivo no existe" << endl;
+        return false;
+    }
+    
+    // Crear archivo temporal
+    char archivoTemp[250];
+    sprintf(archivoTemp, "%s.temp", nombreArchivo);
+    ofstream salida(archivoTemp, ios::binary);
+    
+    if (!salida.is_open()) {
+        cout << " Error al crear archivo temporal" << endl;
+        return false;
+    }
+    
+    // Leer header original
+    ArchivoHeader header = leerHeader(nombreArchivo, false);
+    int registrosOriginales = header.cantidadRegistros;
+    int registrosActivosOriginales = header.registrosActivos;
+    
+    // Reiniciar contadores para el nuevo archivo
+    header.cantidadRegistros = 0;
+    header.registrosActivos = 0;
+    header.fechaUltimaModificacion = time(nullptr);
+    
+    // Escribir nuevo header
+    salida.write(reinterpret_cast<const char*>(&header), sizeof(ArchivoHeader));
+    
+    // Copiar solo registros activos
+    const char* tipo = determinarTipoArchivo(nombreArchivo);
+    ifstream entrada(nombreArchivo, ios::binary);
+    entrada.seekg(sizeof(ArchivoHeader)); // Saltar header
+    
+    int registrosCopiados = 0;
+    
+    if (strcmp(tipo, "PACIENTES") == 0) {
+        Paciente paciente;
+        for (int i = 0; i < registrosOriginales; i++) {
+            entrada.read(reinterpret_cast<char*>(&paciente), sizeof(Paciente));
+            if (entrada.gcount() == sizeof(Paciente) && !paciente.isEliminado()) {
+                salida.write(reinterpret_cast<const char*>(&paciente), sizeof(Paciente));
+                registrosCopiados++;
+            }
+        }
+    } else if (strcmp(tipo, "DOCTORES") == 0) {
+        Doctor doctor;
+        for (int i = 0; i < registrosOriginales; i++) {
+            entrada.read(reinterpret_cast<char*>(&doctor), sizeof(Doctor));
+            if (entrada.gcount() == sizeof(Doctor) && !doctor.isEliminado()) {
+                salida.write(reinterpret_cast<const char*>(&doctor), sizeof(Doctor));
+                registrosCopiados++;
+            }
+        }
+    } else if (strcmp(tipo, "CITAS") == 0) {
+        Cita cita;
+        for (int i = 0; i < registrosOriginales; i++) {
+            entrada.read(reinterpret_cast<char*>(&cita), sizeof(Cita));
+            if (entrada.gcount() == sizeof(Cita) && !cita.isEliminado()) {
+                salida.write(reinterpret_cast<const char*>(&cita), sizeof(Cita));
+                registrosCopiados++;
+            }
+        }
+    }
+    
+    entrada.close();
+    salida.close();
+    
+    // Actualizar header con nuevos contadores
+    header.cantidadRegistros = registrosCopiados;
+    header.registrosActivos = registrosCopiados;
+    
+    fstream archivoTempActualizar(archivoTemp, ios::binary | ios::in | ios::out);
+    if (archivoTempActualizar.is_open()) {
+        archivoTempActualizar.write(reinterpret_cast<const char*>(&header), sizeof(ArchivoHeader));
+        archivoTempActualizar.close();
+    }
+    
+    // Reemplazar archivo original
+    remove(nombreArchivo);
+    if (rename(archivoTemp, nombreArchivo) != 0) {
+        cout << " Error al reemplazar archivo original" << endl;
+        return false;
+    }
+    
+    cout << "   Registros eliminados limpiados" << endl;
+    cout << "   Registros antes: " << registrosOriginales << " (" << registrosActivosOriginales << " activos)" << endl;
+    cout << "   Registros después: " << registrosCopiados << " (todos activos)" << endl;
+    cout << "   Espacio liberado: " << (registrosOriginales - registrosCopiados) << " registros" << endl;
+    
+    return true;
+}
+
+bool GestorArchivos::realizarRespaldoCompleto() {
+    cout << "\n=== REALIZANDO RESPALDO COMPLETO ===" << endl;
+    
+    // Crear directorio de respaldos
+    crearDirectorioSiNoExiste("backups");
+    
+    // Timestamp para el respaldo
+    time_t ahora = time(nullptr);
+    char timestamp[20];
+    strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", localtime(&ahora));
+    
+    char directorioRespaldo[100];
+    sprintf(directorioRespaldo, "backups/respaldo_%s", timestamp);
+    crearDirectorioSiNoExiste(directorioRespaldo);
+    
+    // Lista de archivos a respaldar
+    const char* archivos[] = {
+        RUTA_PACIENTES,
+        RUTA_DOCTORES,
+        RUTA_CITAS,
+        RUTA_HISTORIALES,
+        RUTA_HOSPITAL
+    };
+    const int numArchivos = 5;
+    
+    bool todosExitosos = true;
+    int respaldados = 0;
+    
+    for (int i = 0; i < numArchivos; i++) {
+        const char* archivo = archivos[i];
+        if (archivoExiste(archivo)) {
+            // Obtener solo el nombre del archivo (sin ruta)
+            const char* nombreArchivo = strrchr(archivo, '/');
+            if (nombreArchivo == nullptr) {
+                nombreArchivo = archivo;
+            } else {
+                nombreArchivo++; // Saltar el '/'
+            }
+            
+            char nombreDestino[150];
+            sprintf(nombreDestino, "%s/%s", directorioRespaldo, nombreArchivo);
+            
+            if (copiarArchivo(archivo, nombreDestino)) {
+                cout << " Respaldado: " << archivo << endl;
+                respaldados++;
+            } else {
+                cout << " Error al respaldar: " << archivo << endl;
+                todosExitosos = false;
+            }
+        } else {
+            cout << "  No existe: " << archivo << " (omitido)" << endl;
+        }
+    }
+    
+    if (respaldados > 0) {
+        cout << "\n Respaldo completado: " << respaldados << " archivos guardados en: " 
+             << directorioRespaldo << endl;
+    } else {
+        cout << "\n No se respaldó ningún archivo" << endl;
+    }
+    
+    return todosExitosos;
+}
+
+
+void GestorArchivos::mostrarInformacionArchivos() {
+    cout << "\n=== INFORMACIÓN DE ARCHIVOS DEL SISTEMA ===" << endl;
+    
+    const char* archivos[] = {
+        RUTA_PACIENTES,
+        RUTA_DOCTORES,
+        RUTA_CITAS,
+        RUTA_HISTORIALES,
+        RUTA_HOSPITAL
+    };
+    const int numArchivos = 5;
+    
+    for (int i = 0; i < numArchivos; i++) {
+        const char* archivo = archivos[i];
+        const char* nombreArchivo = strrchr(archivo, '/');
+        if (nombreArchivo == nullptr) {
+            nombreArchivo = archivo;
+        } else {
+            nombreArchivo++; // Saltar el '/'
+        }
+        
+        cout << "\n--- " << nombreArchivo << " ---" << endl;
+        
+        if (archivoExiste(archivo)) {
+            ArchivoHeader header = leerHeader(archivo, false);
+            
+            cout << "Tipo: " << header.tipoArchivo << endl;
+            cout << "Estado: " << (validarHeader(header) ? " VÁLIDO" : "CORRUPTO") << endl;
+            cout << "Registros: " << header.registrosActivos << " activos de " 
+                 << header.cantidadRegistros << " totales" << endl;
+            cout << "Próximo ID: " << header.proximoID << endl;
+            
+            // Calcular tamaño
+            ifstream file(archivo, ios::binary | ios::ate);
+            streampos tamanio = file.tellg();
+            cout << "Tamaño: " << tamanio << " bytes" << endl;
+            file.close();
+            
+            // Mostrar fechas
+            char buffer[80];
+            strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", localtime(&header.fechaCreacion));
+            cout << "Creado: " << buffer << endl;
+            strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", localtime(&header.fechaUltimaModificacion));
+            cout << "Modificado: " << buffer << endl;
+            
+            // Eficiencia de almacenamiento
+            if (header.cantidadRegistros > 0) {
+                double eficiencia = (double)header.registrosActivos / header.cantidadRegistros * 100;
+                cout << "Eficiencia: " << eficiencia << "%" << endl;
+            }
+        } else {
+            cout << "Estado:   NO EXISTE" << endl;
+        }
+    }
+}
+
+
 
 bool GestorArchivos::inicializarArchivo(const char* nombreArchivo, const char* tipo) {
     // Crear directorio si no existe
@@ -53,6 +385,60 @@ bool GestorArchivos::inicializarArchivo(const char* nombreArchivo, const char* t
     return true;
 }
 
+bool GestorArchivos::reconstruirArchivo(const char* nombreArchivo) {
+    cout << "\n=== RECONSTRUYENDO ARCHIVO: " << nombreArchivo << " ===" << endl;
+    
+    if (!archivoExiste(nombreArchivo)) {
+        cout << "Creando nuevo archivo: " << nombreArchivo << endl;
+        const char* tipo = determinarTipoArchivo(nombreArchivo);
+        return inicializarArchivo(nombreArchivo, tipo);
+    }
+    
+    // Crear respaldo antes de reconstruir
+    char nombreRespaldo[200];
+    strcpy(nombreRespaldo, nombreArchivo);
+    strcat(nombreRespaldo, ".backup_reconstruccion");
+    
+    if (!copiarArchivo(nombreArchivo, nombreRespaldo)) {
+        cout << " No se pudo crear respaldo de seguridad" << endl;
+        return false;
+    }
+    
+    // Leer header actual
+    ArchivoHeader header = leerHeader(nombreArchivo, false);
+    
+    if (!validarHeader(header)) {
+        cout << "Header corrupto, reconstruyendo..." << endl;
+        
+        // Reconstruir header
+        const char* tipo = determinarTipoArchivo(nombreArchivo);
+        strncpy(header.tipoArchivo, tipo, sizeof(header.tipoArchivo) - 1);
+        header.tipoArchivo[sizeof(header.tipoArchivo) - 1] = '\0';
+        header.version = VERSION_ACTUAL;
+        header.fechaCreacion = time(nullptr);
+        header.fechaUltimaModificacion = header.fechaCreacion;
+        
+        // Para archivos de datos, reiniciar contadores
+        if (strcmp(tipo, "HOSPITAL") != 0) {
+            header.cantidadRegistros = 0;
+            header.registrosActivos = 0;
+            header.proximoID = 1;
+        }
+    }
+    
+    // Actualizar header reconstruido
+    header.fechaUltimaModificacion = time(nullptr);
+    
+    if (actualizarHeader(nombreArchivo, header)) {
+        cout << " Archivo reconstruido exitosamente" << endl;
+        cout << " Respaldo guardado como: " << nombreRespaldo << endl;
+        return true;
+    }
+    
+    cout << " Error al reconstruir archivo" << endl;
+    return false;
+}
+
 bool GestorArchivos::verificarArchivo(const char* nombreArchivo) {
     ifstream archivo(nombreArchivo, ios::binary);
     if (!archivo.is_open()) {
@@ -87,6 +473,75 @@ bool GestorArchivos::verificarArchivo(const char* nombreArchivo) {
     // Validar header
     return validarHeader(header);
 }
+
+
+bool GestorArchivos::reindexarArchivo(const char* nombreArchivo) {
+    cout << "\n=== REINDEXANDO: " << nombreArchivo << " ===" << endl;
+    
+    if (!archivoExiste(nombreArchivo)) {
+        cout << " Archivo no existe" << endl;
+        return false;
+    }
+    
+    ArchivoHeader header = leerHeader(nombreArchivo, false);
+    
+    if (strcmp(header.tipoArchivo, "HOSPITAL") == 0) {
+        cout << "  El archivo hospital no necesita reindexación" << endl;
+        return true;
+    }
+    
+    cout << "Reindexando " << header.cantidadRegistros << " registros..." << endl;
+    
+    // Para archivos de datos, reasignar IDs secuenciales
+    // Esta es una implementación básica que actualiza el próximo ID
+
+    int maxID = 0;
+    
+    ifstream entrada(nombreArchivo, ios::binary);
+    entrada.seekg(sizeof(ArchivoHeader)); // Saltar header
+    
+    if (strcmp(header.tipoArchivo, "PACIENTES") == 0) {
+        Paciente paciente;
+        for (int i = 0; i < header.cantidadRegistros; i++) {
+            entrada.read(reinterpret_cast<char*>(&paciente), sizeof(Paciente));
+            if (entrada.gcount() == sizeof(Paciente) && paciente.getId() > maxID) {
+                maxID = paciente.getId();
+            }
+        }
+    } else if (strcmp(header.tipoArchivo, "DOCTORES") == 0) {
+        Doctor doctor;
+        for (int i = 0; i < header.cantidadRegistros; i++) {
+            entrada.read(reinterpret_cast<char*>(&doctor), sizeof(Doctor));
+            if (entrada.gcount() == sizeof(Doctor) && doctor.getId() > maxID) {
+                maxID = doctor.getId();
+            }
+        }
+    } else if (strcmp(header.tipoArchivo, "CITAS") == 0) {
+        Cita cita;
+        for (int i = 0; i < header.cantidadRegistros; i++) {
+            entrada.read(reinterpret_cast<char*>(&cita), sizeof(Cita));
+            if (entrada.gcount() == sizeof(Cita) && cita.getId() > maxID) {
+                maxID = cita.getId();
+            }
+        }
+    }
+    
+    entrada.close();
+    
+    // Actualizar próximo ID en el header
+    header.proximoID = maxID + 1;
+    header.fechaUltimaModificacion = time(nullptr);
+    
+    if (actualizarHeader(nombreArchivo, header)) {
+        cout << "   Archivo reindexado exitosamente" << endl;
+        cout << "   Nuevo próximo ID: " << header.proximoID << endl;
+        return true;
+    }
+    
+    cout << "Error al reindexar archivo" << endl;
+    return false;
+}
+
 
 ArchivoHeader GestorArchivos::leerHeader(const char* nombreArchivo, bool mostrarInfo) {
     ArchivoHeader header;

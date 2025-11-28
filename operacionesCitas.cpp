@@ -1,8 +1,8 @@
-#include "operacionesCitas.hpp"
-#include "../persistencia/GestorArchivos.hpp"
-#include "../pacientes/operacionesPacientes.hpp"
-#include "../doctores/operacionesDoctores.hpp"
-#include "operacionesHistorial.hpp"
+#include "../include/operacionesCitas.hpp"
+#include "../include/GestorArchivos.hpp"
+#include "../include/operacionesPacientes.hpp"
+#include "../include/operacionesDoctores.hpp"
+#include "../include/HistorialMedico.hpp"
 #include <iostream>
 #include <fstream>
 #include <cstring>

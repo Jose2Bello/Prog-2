@@ -1,4 +1,4 @@
-#include "hospital.hpp"
+#include "../include/hospital.hpp"
 #include <cstring>
 
 Hospital::Hospital() {

@@ -1,5 +1,5 @@
-#include "operacionesPacientes.hpp"
-#include "../persistencia/GestorArchivos.hpp"
+#include "../include/operacionesPacientes.hpp"
+#include "../include/GestorArchivos.hpp"
 #include <iostream>
 #include <fstream>
 #include <cstring>

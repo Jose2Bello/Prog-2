@@ -1,5 +1,5 @@
-#include "operacionesDoctores.hpp"
-#include "../persistencia/GestorArchivos.hpp"
+#include "../include/operacionesDoctores.hpp"
+#include "../include/GestorArchivos.hpp"
 #include <iostream>
 #include <fstream>
 #include <cstring>
@@ -590,11 +590,7 @@ void OperacionesDoctores::listarDoctoresEliminados() {
         archivo.read(reinterpret_cast<char*>(&d), sizeof(Doctor));
         if (d.isEliminado()) {
             cout << "ID: " << d.getId() << " | Dr. " << d.getNombre() << " " << d.getApellido();
-
-            char fechaStr[20];
-            strftime(fechaStr, sizeof(fechaStr), "%Y-%m-%d", localtime(&d.getFechaModificacion()));
-            cout << " | Eliminado: " << fechaStr << endl;
-
+            cout << " | Cédula: " << d.getCedula() << " | Especialidad: " << d.getEspecialidad() << endl;
             contador++;
         }
     }

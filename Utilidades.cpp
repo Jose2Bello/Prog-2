@@ -1,17 +1,20 @@
-#include "Utilidades.hpp"
+#include "../include/Utilidades.hpp"
 #include <iostream>
 #include <iomanip>
 #include <cctype>
 #include <cstring>
 #include <windows.h>
 #include <conio.h>
+#include <string>
+
+using std::cout;
+using std::endl;
+using std::string;
+
 
 using namespace std;
 
 // ==================== VALIDACIONES ====================
-bool validaciones::verificarArchivo(const char* nombreArchivo){
-    
-}
 
 bool Validaciones::validarFecha(const char* fecha) {
     if (!fecha || strlen(fecha) != 10) return false;
@@ -99,6 +102,33 @@ void Formatos::pausarPantalla() {
 
 void Formatos::setColor(int color) {
     SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), color);
+
+}
+
+
+void Formatos::centrartexto(const string& texto) {
+    // Definiciones de consola de Windows
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    int anchoConsola;
+
+    // Obtener el tamaño del buffer de la pantalla de la consola
+    if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi)) {
+        // Calcular el ancho visible de la ventana
+        anchoConsola = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+    } else {
+        // Fallback si no se puede obtener la información de la consola (ej. 80 columnas)
+        anchoConsola = 80; 
+    }
+
+    int espacios = (anchoConsola - texto.length()) / 2;
+
+    // Asegurar que haya al menos 0 espacios
+    if (espacios < 0) {
+        espacios = 0;
+    }
+    
+    // Imprimir el texto centrado
+    cout << string(espacios, ' ') << texto << endl;
 }
 
 // ==================== ENTRADA USUARIO ====================
@@ -160,5 +190,4 @@ bool EntradaUsuario::leerConfirmacion(const std::string& mensaje) {
             cout << "Error: Por favor ingrese 's' o 'n'." << endl;
         }
     }
-
 }

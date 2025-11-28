@@ -1,6 +1,6 @@
 #include <iostream>
-#include "Menu/Menu.hpp"
-#include "persistencia/GestorArchivos.hpp"
+#include "../include/Menu.hpp"
+#include "../include/GestorArchivos.hpp"
 
 using namespace std;
 
@@ -21,8 +21,12 @@ int main() {
     
     do {
         Menus::mostrarMenuPrincipal();
-        opcion = Menus::leerOpcionMenu("Seleccione una opcion", 0, 6);
-
+       cin >> opcion;
+       if (opcion < 0 || opcion > 5) {
+           cout << "Error: Opcion invalida. Intente de nuevo." << endl;
+           opcion = -1;
+       }
+       cin.ignore();
         switch (opcion) {
             case 1:
                 Menus::menuGestionPacientes();

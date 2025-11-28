@@ -1,23 +1,29 @@
-#include "Menu.hpp"
+#include "../include/Menu.hpp"
+#include <windows.h>
 #include <iostream>
 #include <iomanip>
-
+#include <string>
+#include "../include/Utilidades.hpp"
+#include "../include/GestorArchivos.hpp"
+#include "../include/Constantes.hpp"
 using namespace std;
+
+// ==================== MENUS PUBLICOS ====================
 
 void Menus::mostrarMenuPrincipal() {
     Formatos::limpiarPantalla();
     
     cout << "\n\n\n";
-    Formatos::centrarTexto("===============================================");
-    Formatos::centrarTexto("       HOSPITAL EL CALLAO V3");
-    Formatos::centrarTexto("===============================================");
-    Formatos::centrarTexto("1.  Gestion de Pacientes");
-    Formatos::centrarTexto("2.  Gestion de Doctores");
-    Formatos::centrarTexto("3.  Gestion de Citas");
-    Formatos::centrarTexto("4.  Historial Medico");
-    Formatos::centrarTexto("5.  Mantenimiento del Sistema");
-    Formatos::centrarTexto("0.  Salir");
-    Formatos::centrarTexto("===============================================");
+    cout << ("===============================================");
+    cout << ("       HOSPITAL EL CALLAO V3");
+    cout << ("===============================================");
+    cout << ("1.  Gestion de Pacientes");
+    cout << ("2.  Gestion de Doctores");
+    cout << ("3.  Gestion de Citas");
+    cout << ("4.  Historial Medico");
+    cout << ("5.  Mantenimiento del Sistema");
+    cout << ("0.  Salir");
+    cout << ("===============================================");
     cout << "\n\n";
 }
 
@@ -148,11 +154,12 @@ void Menus::menuGestionDoctores() {
                 string cedula = EntradaUsuario::leerTexto("Cedula", 19);
                 string especialidad = EntradaUsuario::leerTexto("Especialidad", 49);
                 int experiencia = EntradaUsuario::leerEntero("Anios de experiencia", 0, 60);
-                float costo = EntradaUsuario::leerEntero("Costo de consulta", 0, 10000);
+                float costo = EntradaUsuario::leerEntero("Costo de consulta", 0, 10000);   
+                // Crear el objeto Doctor con los datos ingresados y pasarlo a la operación
+                Doctor nuevoDoctor(nombre.c_str(), apellido.c_str(), cedula.c_str(), 
+                                   especialidad.c_str(), experiencia, costo);
                 
-                if (OperacionesDoctores::crearDoctor(nombre.c_str(), apellido.c_str(), 
-                                                   cedula.c_str(), especialidad.c_str(),
-                                                   experiencia, costo)) {
+                if (OperacionesDoctores::agregarDoctor(nuevoDoctor)) {
                     cout << "Doctor registrado exitosamente." << endl;
                 } else {
                     cout << "Error al registrar doctor." << endl;
@@ -318,17 +325,82 @@ void Menus::menuMantenimientoSistema() {
         
         switch (opcion) {
             case 1: {
-                cout << "\n--- VERIFICAR INTEGRIDAD ---" << endl;
-                cout << "Funcionalidad en desarrollo..." << endl;
+                cout << "\n--- VERIFICAR INTEGRIDAD DE ARCHIVOS ---" << endl;
+                cout << "Verificando todos los archivos del sistema..." << endl;
+                
+                GestorArchivos::verificarIntegridad(RUTA_PACIENTES);
+                GestorArchivos::verificarIntegridad(RUTA_DOCTORES);
+                GestorArchivos::verificarIntegridad(RUTA_CITAS);
+                GestorArchivos::verificarIntegridad(RUTA_HOSPITAL);
+                
+                cout << "\nVerificacion completada." << endl;
+                break;
+            }
+            
+            case 2: {
+                cout << "\n--- RECONSTRUIR ARCHIVOS DANADOS ---" << endl;
+                cout << "Reconstruyendo todos los archivos del sistema..." << endl;
+                
+                GestorArchivos::reconstruirArchivo(RUTA_PACIENTES);
+                GestorArchivos::reconstruirArchivo(RUTA_DOCTORES);
+                GestorArchivos::reconstruirArchivo(RUTA_CITAS);
+                GestorArchivos::reconstruirArchivo(RUTA_HOSPITAL);
+                
+                cout << "Reconstruccion completada." << endl;
+                break;
+            }
+            
+            case 3: {
+                cout << "\n--- RESPALDAR DATOS ---" << endl;
+                cout << "Creando respaldo completo del sistema..." << endl;
+                
+                if (GestorArchivos::realizarRespaldoCompleto()) {
+                    cout << "Respaldo completado exitosamente." << endl;
+                } else {
+                    cout << "Error en el proceso de respaldo." << endl;
+                }
+                break;
+            }
+            
+            case 4: {
+                cout << "\n--- RESTAURAR RESPALDO ---" << endl;
+                cout << "Funcionalidad no disponible en este menu." << endl;
+                cout << "Contacte al administrador del sistema." << endl;
+                break;
+            }
+            
+            case 5: {
+                cout << "\n--- LIMPIAR REGISTROS ELIMINADOS ---" << endl;
+                cout << "Limpiando registros eliminados de todos los archivos..." << endl;
+                
+                GestorArchivos::limpiarRegistrosEliminados(RUTA_PACIENTES);
+                GestorArchivos::limpiarRegistrosEliminados(RUTA_DOCTORES);
+                GestorArchivos::limpiarRegistrosEliminados(RUTA_CITAS);
+                
+                cout << "Limpieza completada." << endl;
+                break;
+            }
+            
+            case 6: {
+                cout << "\n--- INFORMACION DE ARCHIVOS ---" << endl;
+                GestorArchivos::mostrarInformacionArchivos();
+                break;
+            }
+            
+            case 7: {
+                cout << "\n--- REINDEXAR ARCHIVOS ---" << endl;
+                cout << "Reindexando todos los archivos del sistema..." << endl;
+                
+                GestorArchivos::reindexarArchivo(RUTA_PACIENTES);
+                GestorArchivos::reindexarArchivo(RUTA_DOCTORES);
+                GestorArchivos::reindexarArchivo(RUTA_CITAS);
+                
+                cout << "Reindexacion completada." << endl;
                 break;
             }
             
             case 0:
                 cout << "Volviendo al menu principal..." << endl;
-                break;
-                
-            default:
-                cout << "Opcion en desarrollo..." << endl;
                 break;
         }
         
@@ -338,7 +410,6 @@ void Menus::menuMantenimientoSistema() {
         
     } while (opcion != 0);
 }
-
 // ==================== FUNCIONES PRIVADAS ====================
 
 void Menus::mostrarEncabezado(const string& titulo) {

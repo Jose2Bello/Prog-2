@@ -1,4 +1,4 @@
-#include "Pacientes.hpp"
+#include "../include/Pacientes.hpp"
 #include <cstring>
 #include <iostream>
 #include <iomanip>
