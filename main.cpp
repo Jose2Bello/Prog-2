@@ -1,17 +1,18 @@
 #include <iostream>
 #include <fstream>
+#include <windows.h>
 #include "../Menus/Menu.hpp"
 #include "../persistencia/GestorArchivos.hpp"
 
 using namespace std;
 
 int main() {
-    cout << "=== SISTEMA HOSPITALARIO ===" << endl;
+	
+system("COLOR F0");
     
-    // 1. Crear directorio datos si no existe (PERO NO los archivos)
+    
     GestorArchivos::crearDirectorioSiNoExiste("datos");
     
-    // 2. Verificar archivos existentes (SOLO INFORMATIVO)
     cout << "\n=== VERIFICANDO ARCHIVOS EXISTENTES ===" << endl;
     
     const char* archivos[] = {
@@ -34,7 +35,7 @@ int main() {
         }
     }
     
-    // 3. MENSAJE IMPORTANTE
+  
     cout << "\nNOTA: Los archivos se crearán automáticamente al agregar datos." << endl;
     cout << "No se borrarán datos existentes.\n" << endl;
     
