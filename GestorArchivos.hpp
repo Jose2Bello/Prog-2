@@ -6,6 +6,7 @@
 
 class GestorArchivos {
 public:
+	
     // Operaciones avanzadas de archivos
     static bool verificarIntegridad(const char* nombreArchivo);
     static bool reconstruirArchivo(const char* nombreArchivo);
