@@ -103,23 +103,7 @@ bool OperacionesPacientes::agregarPaciente(Paciente& paciente) {
     cout << "\n=== VERIFICACION ===" << endl;
     cout << "ID asignado: " << paciente.getId() << endl;
     cout << "Proximo ID para siguiente: " << header.proximoID << endl;
-    
-    // Verificar tamaño del archivo
-    ifstream verificar("datos/pacientes.bin", ios::binary | ios::ate);
-    if (verificar.is_open()) {
-        long tamanio = verificar.tellg();
-        verificar.close();
-        
-        long tamanioEsperado = sizeof(ArchivoHeader) + (header.cantidadRegistros * sizeof(Paciente));
-        cout << "Tamaño archivo: " << tamanio << " bytes" << endl;
-        cout << "Tamaño esperado: " << tamanioEsperado << " bytes" << endl;
-        
-        if (tamanio != tamanioEsperado) {
-            cout << "ADVERTENCIA: Tamaño incorrecto!" << endl;
-        }
-    }
-    
-    cout << "\nPaciente registrado exitosamente!" << endl;
+    cout << "Paciente:"<< paciente.getNombre()<<"registrado exitosamente!" << endl;
     return true;
 }
 
