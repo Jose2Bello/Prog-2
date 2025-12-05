@@ -17,6 +17,9 @@ using namespace std;
 bool OperacionesCitas::agendarCita(int idPaciente, int idDoctor, const char* fecha, 
                                      const char* hora, const char* motivo) {
    
+    std::cout << "\n=== DEBUG AGENDAR CITA ===" << std::endl;
+    std::cout << "RUTA_CITAS = " << RUTA_CITAS << std::endl;
+    
     if (!fecha || !hora || !motivo) {
         std::cout << "Error: Parametros invalidos." << std::endl;
         return false;
@@ -49,6 +52,18 @@ bool OperacionesCitas::agendarCita(int idPaciente, int idDoctor, const char* fec
         return false;
     }
 
+    // ========== VERIFICAR SI ARCHIVO EXISTE ==========
+    std::cout << "\nVerificando archivo de citas..." << std::endl;
+    ifstream test(RUTA_CITAS, ios::binary);
+    if (test.is_open()) {
+        test.seekg(0, ios::end);
+        long tamanio = test.tellg();
+        test.close();
+        std::cout << "Archivo existe - Tamanio: " << tamanio << " bytes" << std::endl;
+    } else {
+        std::cout << "Archivo NO existe" << std::endl;
+    }
+
     // Verificar disponibilidad
     ifstream archivoCitas(RUTA_CITAS, ios::binary);
     
@@ -56,6 +71,9 @@ bool OperacionesCitas::agendarCita(int idPaciente, int idDoctor, const char* fec
         // Leer el Header
         ArchivoHeader header;
         archivoCitas.read(reinterpret_cast<char*>(&header), sizeof(ArchivoHeader));
+        
+        std::cout << "Header leido - Registros: " << header.cantidadRegistros 
+                  << ", Proximo ID: " << header.proximoID << std::endl;
         
         // Verificar si se pudo leer el header
         if (archivoCitas.gcount() == sizeof(ArchivoHeader)) {
@@ -67,6 +85,7 @@ bool OperacionesCitas::agendarCita(int idPaciente, int idDoctor, const char* fec
                 
                 // Si no se pudo leer el registro completo, salir
                 if (archivoCitas.gcount() != sizeof(Cita)) {
+                    std::cout << "Error leyendo cita " << i+1 << std::endl;
                     break;
                 }
                 
@@ -103,22 +122,28 @@ bool OperacionesCitas::agendarCita(int idPaciente, int idDoctor, const char* fec
         archivoCitas.close();
     }
     
-    // ========== AQUÍ COMIENZA EL CÓDIGO PARA GUARDAR LA CITA ==========
-    // Crear nueva cita
+    // ========== CREAR Y GUARDAR LA CITA ==========
+    std::cout << "\nCreando cita..." << std::endl;
     Cita nuevaCita(idPaciente, idDoctor, fecha, hora, motivo);
 
     // Obtener próximo ID del header
     ArchivoHeader headerCitas = GestorArchivos::leerHeader(RUTA_CITAS);
+    std::cout << "Header leido - Tipo: " << headerCitas.tipoArchivo 
+              << ", Proximo ID: " << headerCitas.proximoID << std::endl;
+    
     if (strcmp(headerCitas.tipoArchivo, "INVALIDO") == 0) {
         // Archivo no existe, inicializarlo
+        std::cout << "Inicializando archivo de citas..." << std::endl;
         if (!GestorArchivos::inicializarArchivo(RUTA_CITAS, "CITAS")) {
             std::cout << "Error: No se puede inicializar archivo de citas" << std::endl;
             return false;
         }
         headerCitas = GestorArchivos::leerHeader(RUTA_CITAS);
+        std::cout << "Nuevo header - Proximo ID: " << headerCitas.proximoID << std::endl;
     }
 
     nuevaCita.setId(headerCitas.proximoID);
+    std::cout << "ID asignado a cita: " << nuevaCita.getId() << std::endl;
 
     // Guardar cita en archivo (modo append para agregar al final)
     ofstream archivo(RUTA_CITAS, ios::binary | ios::app);
@@ -127,6 +152,7 @@ bool OperacionesCitas::agendarCita(int idPaciente, int idDoctor, const char* fec
         return false;
     }
 
+    std::cout << "Escribiendo cita en archivo..." << std::endl;
     archivo.write(reinterpret_cast<const char*>(&nuevaCita), sizeof(Cita));
     bool exito = !archivo.fail();
     archivo.close();
@@ -141,8 +167,34 @@ bool OperacionesCitas::agendarCita(int idPaciente, int idDoctor, const char* fec
     headerCitas.proximoID++;
     headerCitas.registrosActivos++;
     headerCitas.fechaUltimaModificacion = time(nullptr);
-    GestorArchivos::actualizarHeader(RUTA_CITAS, headerCitas);
+    
+    std::cout << "Actualizando header..." << std::endl;
+    std::cout << "Nuevos valores - Registros: " << headerCitas.cantidadRegistros
+              << ", Proximo ID: " << headerCitas.proximoID << std::endl;
+    
+    if (!GestorArchivos::actualizarHeader(RUTA_CITAS, headerCitas)) {
+        std::cout << "Error: No se pudo actualizar header" << std::endl;
+        // Podría seguir siendo exitoso si la cita se guardó
+    }
 
+    // ========== VERIFICACIÓN FINAL ==========
+    std::cout << "\n=== VERIFICACIÓN FINAL ===" << std::endl;
+    
+    // Verificar tamaño del archivo
+    ifstream verificar(RUTA_CITAS, ios::binary | ios::ate);
+    if (verificar.is_open()) {
+        long tamanioFinal = verificar.tellg();
+        verificar.close();
+        
+        long tamanioEsperado = sizeof(ArchivoHeader) + (headerCitas.cantidadRegistros * sizeof(Cita));
+        std::cout << "Tamanio archivo: " << tamanioFinal << " bytes" << std::endl;
+        std::cout << "Tamanio esperado: " << tamanioEsperado << " bytes" << std::endl;
+        
+        if (tamanioFinal != tamanioEsperado) {
+            std::cout << "ADVERTENCIA: Tamaño incorrecto!" << std::endl;
+        }
+    }
+    
     std::cout << "\n========================================" << std::endl;
     std::cout << "CITA AGENDADA EXITOSAMENTE" << std::endl;
     std::cout << "========================================" << std::endl;
@@ -274,27 +326,17 @@ bool OperacionesCitas::cancelarCita(int idCita) {
 bool OperacionesCitas::atenderCita(int idCita, const char* diagnostico, const char* tratamiento, 
                                   const char* medicamentos) {
     // Validar parámetros
-    if (!diagnostico || !tratamiento || !medicamentos) {
-        cout << "Error: Parámetros inválidos." << endl;
-        return false;
-    }
-
-    if (strlen(diagnostico) == 0) {
+    if (!diagnostico || strlen(diagnostico) == 0) {
         cout << "Error: El diagnóstico no puede estar vacío" << endl;
         return false;
     }
 
-    // Buscar la cita por ID
-    int indiceCita = buscarIndicePorID(idCita);
-    if (indiceCita == -1) {
-        cout << "Error: No se encontró cita con ID " << idCita << endl;
-        return false;
-    }
+    cout << "\n=== ATENDIENDO CITA ID: " << idCita << " ===" << endl;
 
-    // Leer la cita completa
+    // Buscar la cita por ID
     Cita cita = buscarPorID(idCita);
     if (cita.getId() == -1) {
-        cout << "Error: No se puede acceder a la cita ID " << idCita << endl;
+        cout << "Error: No se encontró cita con ID " << idCita << endl;
         return false;
     }
 
@@ -336,17 +378,36 @@ bool OperacionesCitas::atenderCita(int idCita, const char* diagnostico, const ch
         return false;
     }
 
-    // Crear entrada en el historial médico (si existe el módulo)
-    // Nota: Aquí asumimos que existe OperacionesHistorial
-    HistorialMedico nuevaConsulta;
-    // ... código para crear la consulta en historial ...
+    // Actualizar contador de consultas del paciente
+    paciente.setCantidadConsultas(paciente.getCantidadConsultas() + 1);
+    
+    // Actualizar paciente en el archivo
+    if (!OperacionesPacientes::actualizarPaciente(paciente)) {
+        cout << "Advertencia: No se pudo actualizar contador de consultas del paciente" << endl;
+    }
 
+    // ========== MOSTRAR RESULTADO ==========
+    
+    cout << "\n========================================" << endl;
     cout << "CITA ATENDIDA EXITOSAMENTE" << endl;
+    cout << "========================================" << endl;
     cout << "ID Cita: " << cita.getId() << endl;
     cout << "Paciente: " << paciente.getNombre() << " " << paciente.getApellido() << endl;
+    cout << "Cédula: " << paciente.getCedula() << endl;
     cout << "Doctor: Dr. " << doctor.getNombre() << " " << doctor.getApellido() << endl;
+    cout << "Especialidad: " << doctor.getEspecialidad() << endl;
     cout << "Fecha: " << cita.getFecha() << " " << cita.getHora() << endl;
     cout << "Costo: $" << doctor.getCostoConsulta() << endl;
+    cout << "Consultas totales del paciente: " << paciente.getCantidadConsultas() << endl;
+    cout << "\n--- RESUMEN DE ATENCIÓN ---" << endl;
+    cout << "Diagnóstico: " << diagnostico << endl;
+    if (tratamiento && strlen(tratamiento) > 0) {
+        cout << "Tratamiento: " << tratamiento << endl;
+    }
+    if (medicamentos && strlen(medicamentos) > 0) {
+        cout << "Medicamentos: " << medicamentos << endl;
+    }
+    cout << "========================================" << endl;
 
     return true;
 }
@@ -359,10 +420,10 @@ Cita OperacionesCitas::buscarPorID(int id) {
         return cita;
     }
 
-    // Abrir citas.bin
-    ifstream archivo("citas.bin", ios::binary);
+    // Abrir citas.bin usando RUTA_CITAS
+    ifstream archivo(RUTA_CITAS, ios::binary);
     if (!archivo.is_open()) {
-        cout << "Error: No se puede abrir citas.bin" << endl;
+        cout << "Error: No se puede abrir archivo de citas: " << RUTA_CITAS << endl;
         return cita;
     }
 
@@ -370,8 +431,13 @@ Cita OperacionesCitas::buscarPorID(int id) {
     ArchivoHeader header;
     archivo.read(reinterpret_cast<char*>(&header), sizeof(ArchivoHeader));
 
-    if (archivo.fail()) {
-        cout << "Error: No se puede leer header de citas.bin" << endl;
+    cout << "\n=== DEBUG buscarPorID ===" << endl;
+    cout << "Buscando ID: " << id << endl;
+    cout << "Tipo archivo: " << header.tipoArchivo << endl;
+    cout << "Cantidad registros: " << header.cantidadRegistros << endl;
+
+    if (archivo.fail() || strcmp(header.tipoArchivo, "CITAS") != 0) {
+        cout << "Error: Archivo de citas corrupto o vacío" << endl;
         archivo.close();
         return cita;
     }
@@ -383,30 +449,39 @@ Cita OperacionesCitas::buscarPorID(int id) {
         return cita;
     }
 
-    // Saltar header
-    archivo.seekg(sizeof(ArchivoHeader), ios::beg);
-
     // Búsqueda secuencial
     bool encontrado = false;
-    int citasLeidas = 0;
 
-    while (citasLeidas < header.cantidadRegistros &&
-           archivo.read(reinterpret_cast<char*>(&cita), sizeof(Cita))) {
-        if (cita.getId() == id && !cita.isEliminado()) {
-            encontrado = true;
+    for (int i = 0; i < header.cantidadRegistros; i++) {
+        archivo.read(reinterpret_cast<char*>(&cita), sizeof(Cita));
+        
+        if (archivo.gcount() != sizeof(Cita)) {
+            cout << "Error leyendo cita " << i+1 << endl;
             break;
         }
-        citasLeidas++;
+        
+        cout << "Cita #" << (i+1) 
+             << " - ID: " << cita.getId() 
+             << ", Estado: " << cita.getEstado()
+             << ", Eliminada: " << (cita.isEliminado() ? "Sí" : "No") 
+             << endl;
+        
+        if (cita.getId() == id && !cita.isEliminado()) {
+            encontrado = true;
+            cout << "¡Cita encontrada!" << endl;
+            break;
+        }
     }
 
     archivo.close();
 
     if (!encontrado) {
         Cita vacia;
-        cout << "Cita con ID " << id << " no encontrada" << endl;
+        cout << "Cita con ID " << id << " no encontrada o eliminada" << endl;
         return vacia;
     }
 
+    cout << "=== FIN DEBUG ===" << endl;
     return cita;
 }
 
@@ -637,22 +712,29 @@ void OperacionesCitas::listarCitasPendientes() {
 }
 
 void OperacionesCitas::listarTodasCitas(bool mostrarCanceladas) {
-    // Leer header para saber cuántas citas hay
-    ArchivoHeader header = GestorArchivos::leerHeader("citas.bin");
-
-    if (strcmp(header.tipoArchivo, "INVALIDO") == 0 ||
-        header.registrosActivos == 0) {
+    cout << "\n=== LISTANDO CITAS ===" << endl;
+    
+    // Crear directorio si no existe
+    system("mkdir datos 2>nul");
+    
+    // Leer header usando RUTA_CITAS
+    ArchivoHeader header = GestorArchivos::leerHeader(RUTA_CITAS);
+    
+    if (strcmp(header.tipoArchivo, "INVALIDO") == 0) {
+        cout << "Archivo de citas no existe" << endl;
+        return;
+    }
+    
+    if (header.registrosActivos == 0) {
         cout << "No hay citas registradas." << endl;
         return;
     }
 
-    cout << "\nLISTA DE TODAS LAS CITAS (" << header.registrosActivos << "):" << endl;
-    cout << "+--------------------------------------------------------------------------------+" << endl;
-    cout << "|  ID  |   FECHA    | HORA  | PACIENTE | DOCTOR |    ESTADO    |     MOTIVO      |" << endl;
-    cout << "+------+------------+-------+----------+--------+--------------+-----------------+" << endl;
+    cout << "\nLISTA DE CITAS (" << header.registrosActivos << " registros):" << endl;
+    cout << "================================================================" << endl;
 
     // Abrir archivo y leer citas
-    ifstream archivo("citas.bin", ios::binary);
+    ifstream archivo(RUTA_CITAS, ios::binary);
     if (!archivo.is_open()) {
         cout << "Error: No se puede abrir el archivo de citas" << endl;
         return;
@@ -664,34 +746,48 @@ void OperacionesCitas::listarTodasCitas(bool mostrarCanceladas) {
     Cita c;
     int citasMostradas = 0;
 
-    while (archivo.read(reinterpret_cast<char*>(&c), sizeof(Cita)) &&
-           citasMostradas < header.registrosActivos) {
-        // Solo mostrar citas no eliminadas (o todas si se solicita)
-        if (mostrarCanceladas || strcmp(c.getEstado(), "CANCELADA") != 0) {
-            char motivoMostrar[18];
-            strncpy(motivoMostrar, c.getMotivo(), sizeof(motivoMostrar) - 1);
-            motivoMostrar[sizeof(motivoMostrar) - 1] = '\0';
-            if (strlen(c.getMotivo()) > 16) {
-                motivoMostrar[13] = '.';
-                motivoMostrar[14] = '.';
-                motivoMostrar[15] = '.';
-                motivoMostrar[16] = '\0';
+    for (int i = 0; i < header.cantidadRegistros; i++) {
+        archivo.read(reinterpret_cast<char*>(&c), sizeof(Cita));
+        
+        if (archivo.gcount() != sizeof(Cita)) {
+            cout << "Error leyendo cita " << i+1 << endl;
+            break;
+        }
+        
+        // Solo mostrar citas no eliminadas
+        if (!c.isEliminado()) {
+            if (mostrarCanceladas || strcmp(c.getEstado(), "CANCELADA") != 0) {
+                cout << "\n[" << ++citasMostradas << "] ID: " << c.getId() << endl;
+                cout << "   Fecha: " << c.getFecha() << " " << c.getHora() << endl;
+                
+                // Obtener información del paciente
+                Paciente paciente = OperacionesPacientes::buscarPorID(c.getIdPaciente());
+                if (paciente.getId() != -1) {
+                    cout << "   Paciente: " << paciente.getNombre() << " " << paciente.getApellido() << endl;
+                } else {
+                    cout << "   Paciente: ID " << c.getIdPaciente() << " (no encontrado)" << endl;
+                }
+                
+                // Obtener información del doctor
+                Doctor doctor = OperacionesDoctores::buscarPorID(c.getIdDoctor());
+                if (doctor.getId() != -1) {
+                    cout << "   Doctor: Dr. " << doctor.getNombre() << " " << doctor.getApellido() << endl;
+                } else {
+                    cout << "   Doctor: ID " << c.getIdDoctor() << " (no encontrado)" << endl;
+                }
+                
+                cout << "   Estado: " << c.getEstado() << endl;
+                cout << "   Motivo: " << c.getMotivo() << endl;
             }
-
-            printf("| %4d | %10s | %5s | %8d | %6d | %-12s | %-15s |\n", 
-                   c.getId(), c.getFecha(), c.getHora(), c.getIdPaciente(), 
-                   c.getIdDoctor(), c.getEstado(), motivoMostrar);
-
-            citasMostradas++;
         }
     }
 
     archivo.close();
 
-    cout << "+--------------------------------------------------------------------------------+" << endl;
-
-    // Mostrar estadísticas adicionales
-    if (citasMostradas > 0) {
+    if (citasMostradas == 0) {
+        cout << "No hay citas para mostrar." << endl;
+    } else {
+        cout << "\n================================================================" << endl;
         cout << "Total mostradas: " << citasMostradas << " cita(s)" << endl;
     }
 }
@@ -794,31 +890,46 @@ bool OperacionesCitas::verificarDisponibilidad(int idDoctor, const char* fecha, 
 }
 
 // Funciones privadas helper
-int OperacionesCitas::buscarIndicePorID(int id) {
-    if (id <= 0) return -1;
+int OperacionesCitas::buscarIndicePorID(int idCita) {
+    if (idCita <= 0) {
+        return -1;
+    }
 
-    ifstream archivo("citas.bin", ios::binary);
-    if (!archivo.is_open()) return -1;
+    ifstream archivo(RUTA_CITAS, ios::binary);  // Misma ruta que buscarPorID
+    if (!archivo.is_open()) {
+        cout << "Error: No se puede abrir archivo de citas" << endl;
+        return -1;
+    }
 
     // Leer header
     ArchivoHeader header;
     archivo.read(reinterpret_cast<char*>(&header), sizeof(ArchivoHeader));
 
-    // Búsqueda secuencial por índice
-    Cita c;
-    int indice = 0;
+    if (archivo.fail() || strcmp(header.tipoArchivo, "CITAS") != 0) {
+        archivo.close();
+        return -1;
+    }
 
-    while (indice < header.cantidadRegistros &&
-           archivo.read(reinterpret_cast<char*>(&c), sizeof(Cita))) {
-        if (c.getId() == id) {
-            archivo.close();
-            return indice;
+    Cita cita;
+    int indice = -1;
+
+    // Búsqueda secuencial (misma lógica que buscarPorID)
+    for (int i = 0; i < header.cantidadRegistros; i++) {
+        archivo.read(reinterpret_cast<char*>(&cita), sizeof(Cita));
+        
+        if (archivo.gcount() != sizeof(Cita)) {
+            break;
         }
-        indice++;
+        
+        // Misma condición EXACTA que en buscarPorID
+        if (cita.getId() == idCita && !cita.isEliminado()) {
+            indice = i;
+            break;
+        }
     }
 
     archivo.close();
-    return -1;
+    return indice;
 }
 
 long OperacionesCitas::calcularPosicion(int indice) {
