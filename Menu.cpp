@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <string>
 #include <cstring>
+#include <windows.h>
 #include <ctime>
 #include "../Utilidades/Utilidades.hpp"
 #include "../persistencia/GestorArchivos.hpp"
@@ -13,22 +14,40 @@
 
 using namespace std;
 
-// ==================== MENUS PUBLICOS ====================
+
 
 void Menus::mostrarMenuPrincipal() {
     Formatos::limpiarPantalla();
     
+    
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    int consoleWidth = 80; // Ancho por defecto
+    
+    if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi)) {
+        consoleWidth = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+    }
+    
+  
+    int menuWidth = 50;
+    int padding = (consoleWidth - menuWidth) / 2;
+    
+    // Función para imprimir centrado
+    auto imprimirCentrado = [&](const string& texto) {
+        cout << string(padding, ' ') << texto << endl;
+    };
+    
     cout << "\n\n\n";
-    cout << ("===============================================");
-    cout << ("       HOSPITAL EL CALLAO V3");
-    cout << ("===============================================");
-    cout << ("1.  Gestion de Pacientes");
-    cout << ("2.  Gestion de Doctores");
-    cout << ("3.  Gestion de Citas");
-    cout << ("4.  Historial Medico");
-    cout << ("5.  Mantenimiento del Sistema");
-    cout << ("0.  Salir");
-    cout << ("===============================================");
+    imprimirCentrado("===============================================");
+    imprimirCentrado("       HOSPITAL EL CALLAO V3");
+    imprimirCentrado("===============================================");
+    imprimirCentrado("1.  Gestion de Pacientes");
+    imprimirCentrado("2.  Gestion de Doctores");
+    imprimirCentrado("3.  Gestion de Citas");
+    imprimirCentrado("4.  Historial Medico");
+    imprimirCentrado("5.  Mantenimiento del Sistema");
+    imprimirCentrado("0.  Salir");
+    imprimirCentrado("===============================================");
+    imprimirCentrado("Seleccione una opcion (0-5)");
     cout << "\n\n";
 }
 
