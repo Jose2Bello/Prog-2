@@ -244,7 +244,6 @@ void Paciente::mostrarInfo() const {
     cout << "Telefono: " << telefono << endl;
     cout << "Email: " << email << endl;
     cout << "Direccion: " << direccion << endl;
-    cout << "Alergias: " << alergias << endl;
     cout << "Observaciones: " << observaciones << endl;
     cout << "Consultas realizadas: " << cantidadConsultas << endl;
     cout << "Citas agendadas: " << cantidadCitas << endl;
