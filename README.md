@@ -1,5 +1,5 @@
 Sistema de Gestión Hospitalaria de el Callao
-Sistema completo de gestión para hospitales y clínicas, desarrollado en C++ con almacenamiento persistente en archivos binarios.
+Sistema completo de gestión para hospitales y, desarrollado en C++ con almacenamiento persistente en archivos binarios.
 
 1.  Características Principales
 Gestión Integral
