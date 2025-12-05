@@ -1,7 +1,7 @@
 Sistema de Gestión Hospitalaria de el Callao
 Sistema completo de gestión para hospitales y, desarrollado en C++ con almacenamiento persistente en archivos binarios.
 
-1.  Características Principales
+1.  # Características Principales
 Gestión Integral
 
 Pacientes - Historia clínico completa con seguimiento de consultas
@@ -12,7 +12,7 @@ Citas - Agendamiento, cancelación y atención médica
 
 Hospital - Configuración institucional y estadísticas
 
-2. Sistema Avanzado
+2. # Sistema Avanzado
 IDs autoincrementales controlados por el sistema
 
 Borrado lógico (no destructivo) de registros
@@ -23,7 +23,7 @@ Validación de datos en tiempo real
 
 Archivos de configuración persistentes
 
-3. Seguridad y Control
+3. # Seguridad y Control
 Validación de cédulas, emails y teléfonos
 
 Control de versiones de archivos
@@ -32,7 +32,7 @@ Timestamps de creación y modificación
 
 Backup automático de datos
 
-4. Arquitectura del Sistema
+4. # Arquitectura del Sistema
 Clases Principales
 Hospital:	Configuración y estadísticas del hospital
 Paciente:	Información médica y personal del paciente
@@ -43,7 +43,7 @@ Formatos:	Formateo de salida y presentación
 EntradaUsuario:	Entrada de datos segura
 Menus:	Sistema de menús interactivos
 
-5. Compilación
+5. # Compilación
 Requisitos:
 
 Compilador C++11 o superior
@@ -71,7 +71,7 @@ Archivos binarios con headers inicializados
 Configuración predeterminada del hospital
 
 
-6. Sistema de IDs
+6. # Sistema de IDs
 El hospital maneja IDs autoincrementales independientes:
 
 Entidad	Rango	Controlado por
@@ -81,7 +81,7 @@ Citas	3000+	Hospital::siguienteIDCita
 Consultas	4000+	Hospital::siguienteIDConsulta
 
 
-📋 Menús Disponibles
+ # Menús Disponibles
 1. Menú Principal
 [1] Gestión de Pacientes
 [2] Gestión de Doctores  
@@ -112,7 +112,7 @@ Buscar por nombre/cedula/especialidad
 Ver disponibilidad
 
 4. Gestión de Citas
-5. 
+   
 Agendar nueva cita
 
 Atender cita (con diagnóstico/tratamiento)
@@ -141,7 +141,7 @@ Ver estadísticas del sistema
 
 Realizar backup
 
-🔐 Validaciones Implementadas
+# Validaciones Implementadas
 Pacientes
 Cédula (formato nacional)
 
@@ -169,7 +169,7 @@ Especialidad (lista predefinida)
 
 Horario (formato 24h)
 
-💾 Sistema de Archivos
+# Sistema de Archivos
 Estructura de Archivos Binarios
 cpp
 struct ArchivoHeader {
@@ -188,7 +188,8 @@ hospital.bin	Configuración y contadores	1 KB
 pacientes.bin	Todos los pacientes	10 KB/paciente
 doctores.bin	Doctores registrados	5 KB/doctor
 citas.bin	Historial de citas	2 KB/cita
-⚠️ Solución de Problemas
+
+# Solución de Problemas
 Error común: "No se puede encontrar cita con ID X"
 Ejecutar Verificar integridad desde Mantenimiento
 
@@ -211,7 +212,7 @@ g++ -std=c++11 -o hospital.exe src/*.cpp -Iinclude
 #include "Hospital.h"
 #include "Paciente.h"
 // ...
-📈 Estadísticas del Sistema
+Estadísticas del Sistema
 El hospital lleva registro de:
 
 ✅ Total de pacientes registrados
